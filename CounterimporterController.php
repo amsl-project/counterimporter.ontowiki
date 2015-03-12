@@ -180,7 +180,8 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 if ($dateIsNumeric === true) {
                     if (checkdate($month, $day, $year) === true && $test === '--') {
                         $date = $year . '-' . $month . '-' . $day;
-                        $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'wasCreatedOn'][] = array(
+                        $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'wasCreatedOn'][] =
+                            array(
                             'type' => 'literal',
                             'value' => $date,
                             'datatype' => $this::NS_XSD . 'date'
@@ -805,4 +806,103 @@ class CounterimporterController extends OntoWiki_Controller_Component
         }
         return true;
     }
+
+
+
+    public function fetchCounterReport ($interfaceUri) {
+
+       return;
+    }
+
+    public function writexmlAction () {
+        //TODO add access control
+        //TODO add post parameter
+
+        // tells the OntoWiki to not apply the template to this action
+        $this->_helper->viewRenderer->setNoRender();
+        $this->_helper->layout->disableLayout();
+
+        // TODO Variables must be filled with values found in amsl store or post request
+        $rqstrID = null;
+        $rqstrName = null;
+        $rqstrMail = null;
+        $cstmrID = null;
+        $startDate = null;
+        $endDate = null;
+        $fltr = array();
+
+        $dom = new DOMDocument('1.0', 'utf-8');
+        $dom->formatOutput = true;
+        $envelope = $dom->createElement('soap:Envelope');
+        $dom->appendChild($envelope);
+        $envelope->setAttributeNS(
+            'http://www.w3.org/2000/xmlns/',
+            'xmlns:soap',
+            'http://schemas.xmlsoap.org/soap/envelope/'
+        );
+        $envelope->setAttributeNS(
+            'http://www.w3.org/2000/xmlns/',
+            'xmlns:coun',
+            'http://www.niso.org/schemas/sushi/counter'
+        );
+        $envelope->setAttributeNS(
+            'http://www.w3.org/2000/xmlns/',
+            'xmlns:sus',
+            'http://www.niso.org/schemas/sushi'
+        );
+
+        // TODO find candidates that can be outsourced in a seperate method
+        $header = $dom->createElement('soap:Header');
+        $body = $dom->createElement('soap:Body');
+        $reportRequest = $dom->createElement('coun:ReportRequest');
+        $reportRequest->setAttribute('ID', '007');
+        $reportRequest->setAttribute('Created', date('c'));
+
+        // Data of requestor
+        $requestor = $dom->createElement('sus:Requestor');
+        $requestorID = $dom->createElement('sus:ID', '012345678-9');
+        $requestorName = $dom->createElement('sus:Name', 'Das Zahlenwesen');
+        $requestorMail = $dom->createElement('sus:Email', 'zahlenwesen@univ.org');
+        // Data of customer
+        $customer = $dom->createElement('sus:CustomerReference');
+        $customerID = $dom->createElement('sus:ID', $cstmrID);
+        $report = $dom->createElement('sus:ReportDefinition');
+        $report->setAttribute('Name', 'TestNAME');
+        $report->setAttribute('Release', '4.0');
+
+        // Filter
+        $filter = $dom->createElement('sus:Filters');
+        if (count($fltr) > 0) {
+            foreach ($fltr as $key => $filterType) {
+                $i = $dom->createElement('sus:Filter');
+                $i->setAttribute('Name', $filterType);
+                $filter->appendChild($i);
+            }
+        }
+        $usage = $dom->createElement('sus:UsageDateRange');
+        $begin = $dom->createElement('sus:Begin',date('Y-m-d'));
+        $end = $dom->createElement('sus:End',date('Y-m-d'));
+
+
+        // Build domtree
+        $envelope->appendChild($header);
+        $header->appendChild($body);
+        $body->appendChild($reportRequest);
+        $reportRequest->appendChild($requestor);
+        $reportRequest->appendChild($customer);
+        $reportRequest->appendChild($report);
+        $requestor->appendChild($requestorID);
+        $requestor->appendChild($requestorName);
+        $requestor->appendChild($requestorMail);
+        $customer->appendChild($customerID);
+        $report->appendChild($filter);
+        $filter->appendChild($usage);
+        $usage->appendChild($begin);
+        $usage->appendChild($end);
+
+        return;
+        // debug;
+        //echo $dom->saveXML();
+    }
 }
+
