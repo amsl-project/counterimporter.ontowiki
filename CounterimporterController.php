@@ -12,7 +12,6 @@
  * @category OntoWiki
  * @package  Extensions_Issnimporter
  * @author   Norman Radtke <radtke@ub.uni-leipzig.de>
- * @author   Sebastian Tramp <mail@sebastian.tramp.name>
  */
 class CounterimporterController extends OntoWiki_Controller_Component
 {
@@ -102,7 +101,6 @@ class CounterimporterController extends OntoWiki_Controller_Component
     public function counterxmlAction()
     {
         $this->view->placeholder('main.window.title')->set('Upload a counter xml file');
-        $today = date("Y-m-d");
 
         if ($this->_request->isPost()) {
             $post = $this->_request->getPost();
@@ -138,310 +136,62 @@ class CounterimporterController extends OntoWiki_Controller_Component
             return;
         }
 
-        // regular expressions
-        $regISBN = '/\b(?:ISBN(?:: ?| ))?((?:97[89])?\d{9}[\dx])\b/i';
-        $regISSN = '/\d{4}\-\d{3}[\dxX]/';
-
-        // create report uri
-        $this->_reportUri  = $this::NS_BASE . 'report/' . md5(rand());
-
-        $this->_rprtRes = array(
-            $this->_reportUri => array(
-                EF_RDF_TYPE => array(
-                    array(
-                        'type' => 'uri',
-                        'value' => $this::NS_COUNTR . 'Report'
-                    )
-                )
-            )
-        );
 
         // READING XML file
-        $xmlstr     = file_get_contents($file);
-        $xml        = new SimpleXMLElement($xmlstr);
-        $child      = $xml->children("http://www.niso.org/schemas/counter");
-
-        foreach ($child as $out) {
-            $report = $out->children("http://www.niso.org/schemas/counter");
-            $attributes = $out->attributes();
-            // Check if date is a valid date (string methods used)
-            if (strlen($attributes->Created > 9)) {
-                $substring = substr($attributes->Created, 0, 10);
-                $year = substr($substring, 0, 4);
-                $hyphen1 = substr($substring, 4, 1);
-                $month = substr($substring, 5, 2);
-                $hyphen2 = substr($substring, 7, 1);
-                $day = substr($substring, 8, 2);
-                $test = $hyphen1 . $hyphen2;
-                $dateIsNumeric = false;
-                if (is_numeric($year) && is_numeric($month) && is_numeric($day)) {
-                    $dateIsNumeric = true;
-                }
-                if ($dateIsNumeric === true) {
-                    if (checkdate($month, $day, $year) === true && $test === '--') {
-                        $date = $year . '-' . $month . '-' . $day;
-                        $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'wasCreatedOn'][] =
-                            array(
-                            'type' => 'literal',
-                            'value' => $date,
-                            'datatype' => $this::NS_XSD . 'date'
-                        );
-                    }
-                } else {
-                    $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'wasCreatedOn'][] = array(
-                        'type' => 'literal',
-                        'value' => $today,
-                        'datatype' => $this::NS_XSD . 'date'
-                    );
-                }
+        $xmlstr = file_get_contents($file);
+        $xmlstr = str_replace('xmlns=', 'ns=', $xmlstr);
+        $xml = new SimpleXMLElement($xmlstr);
+        $counterUrl = 'http://www.niso.org/schemas/counter';
+        $ns = $xml->getDocNamespaces(true);
+        if (count($ns) != 0) {
+            if (isset($ns['xmlns']) && $ns['xmlns'] === $counterUrl) {
+                $implicit = true;
             }
 
-            $value = (string)$attributes->ID;                                           // Report Id
-            if (!(empty($value))) {
-                $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'hasReportID'][] = array(
-                    'type' => 'literal',
-                    'value' => $value
-                );
+            if (in_array($counterUrl, $ns)) {
+                $flippedNs = array_flip($ns);
+                $counterNS = $flippedNs[$counterUrl];
+                $xml->registerXPathNamespace($counterNS, 'http://www.niso.org/schemas/counter');
             }
-
-            $value = (string)$attributes->Version;                                 // Report Version
-            if (!(empty($value))) {
-                $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'hasReportVersion'][] = array(
-                    'type' => 'literal',
-                    'value' => $value
-                );
-            }
-
-            $value = (string)$attributes->Name;                                      // Report Title
-            if (!(empty($value))) {
-                $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'hasReportTitle'][] = array(
-                    'type' => 'literal',
-                    'value' => $value
-                );
-            }
-
-                                                                                      // Vendor data
-            $vendor = $report->Vendor;
-            $vndrRes = $this->_writeOrganizationData($vendor, 'Vendor');
-
-                                                                                    // Custumor data
-            $customer = $report->Customer;
-            $cstmrRes = $this->_writeOrganizationData($customer, 'Customer');
-
-                                                                                     // Report Items
-            foreach ($customer->ReportItems as $reportItem) {
-                $itemName = (string)$reportItem->ItemName;
-                if (!(empty($itemName))) {
-                    $itemUri = $this::NS_BASE . 'reportitem/' . urlencode($itemName);
-                } else {
-                    $itemUri = $this::NS_BASE . 'reportitem/' . md5(rand());
-                }
-
-                $itemRes[$itemUri][EF_RDF_TYPE][] = array(
-                    'type' => 'uri',
-                    'value' => $this::NS_COUNTR . 'ReportItem'
-                );
-
-                if (!(empty($itemName))) {
-                    $itemRes[$itemUri][EF_RDFS_LABEL][] = array(
-                        'type' => 'literal',
-                        'value' => $itemName
-                    );
-                }
-
-                $itemRes[$itemUri][$this::NS_COUNTR . 'isContainedIn'][] = array(
-                    'type' => 'uri',
-                    'value' => $this->_reportUri
-                );
-
-                $platform = (string)$reportItem->ItemPlatform;
-
-                if (!(empty($platform))) {
-                    $platformUri = $this::NS_BASE . 'platform/' . urlencode($platform);
-                    $pltfrmRes[$platformUri][EF_RDF_TYPE][] = array(
-                        'type' => 'uri',
-                        'value' => $this::NS_COUNTR . 'Platform'
-                    );
-
-                    $pltfrmRes[$platformUri][$this::NS_SKOS . 'altLabel'][] = array(
-                        'type' => 'literal',
-                        'value' => $platform
-                    );
-
-                    $itemRes[$itemUri][$this::NS_COUNTR . 'isAccessibleVia'][] = array(
-                        'type' => 'uri',
-                        'value' => $platformUri
-                    );
-                }
-
-                $itemPublisher = (string)$reportItem->ItemPublisher;
-                if (!(empty($itemPublisher))) {
-                    // TODO Match
-                    $publisherUri = $this::NS_BASE . 'publisher/' . urlencode($itemPublisher);
-                    $pblshrRes[$publisherUri][EF_RDF_TYPE][] = array(
-                        'type' => 'uri',
-                        'value' => $this::NS_COUNTR . 'Publisher'
-                    );
-
-                    $itemRes[$itemUri][$this::NS_DC . 'publisher'][] = array(
-                        'type' => 'uri',
-                        'value' => $publisherUri
-                    );
-                }
-
-                $itemDataType = (string)$reportItem->ItemDataType;
-                if (!(empty($itemPublisher))) {
-                    $itemRes[$itemUri][$this::NS_COUNTR . 'hasItemDataType'][] = array(
-                        'type' => 'uri',
-                        'value' => $this::NS_COUNTR . $itemDataType
-                    );
-                }
-
-                foreach ($reportItem->ItemIdentifier as $itemIdentifier) {
-                    $itemIdValue = (string)$itemIdentifier->Value;
-                    $itemIdType = (string)$itemIdentifier->Type;
-                    if (!(empty($itemIdValue))) {
-                        if (!(empty($itemIdType))) {
-                            switch (strtolower($itemIdType)) {
-                                case 'doi':
-                                    $pred = $this::NS_AMSL . 'doi';
-                                    if (substr($itemIdValue, 0, 3) === '10.') {
-                                        $uri = 'http://doi.org/' . $itemIdValue;
-                                    } else {
-                                        $uri = $this::NS_BASE . 'noValueGiven';
-                                    }
-                                    break;
-                                case 'online_issn':
-                                    $pred = $this::NS_AMSL . 'eissn';
-                                    if (preg_match($regISSN, $itemIdValue)) {
-                                        $uri = 'urn:ISSN:' . $itemIdValue;
-                                    }
-                                    break;
-                                case 'print_issn':
-                                    $pred = $this::NS_AMSL . 'pissn';
-                                    if (preg_match($regISSN, $itemIdValue)) {
-                                        $uri = 'urn:ISSN:' . $itemIdValue;
-                                    }
-                                    break;
-                                case 'online_isbn':
-                                    $pred = $this::NS_AMSL . 'eisbn';
-                                    if (preg_match($regISBN, $itemIdValue)) {
-                                        $uri = 'urn:ISBN:' . $itemIdValue;
-                                    }
-                                    break;
-                                case 'print_isbn':
-                                    $pred = $this::NS_AMSL . 'pisbn';
-                                    if (preg_match($regISBN, $itemIdValue)) {
-                                        $uri = 'urn:ISBN:' . $itemIdValue;
-                                    }
-                                    break;
-                                case 'proprietaryID':
-                                    $pred = $this::NS_AMSL . 'proprietaryId';
-                                    if (preg_match($regISBN, $itemIdValue)) {
-                                        $uri = $this::NS_BASE . 'ProprietaryID/' . $itemIdValue;
-                                    }
-                                    break;
-                            }
-                            $itemRes[$itemUri][$pred][] = array(
-                                'type' => 'uri',
-                                'value' => $uri
-                            );
-                        }
-                    }
-                }
-
-                $pubYr = (string)$reportItem->ItemPerformance->PubYr;
-                $pubYrFrom = (string)$reportItem->ItemPerformance->PubYrFrom;
-                $pubYrTo = (string)$reportItem->ItemPerformance->PubYrTo;
-                if (!(empty($pubYr))) {
-                    $pubUri = $this::NS_BASE . urlencode($pubYr);
-                    $pubYear[$pubYr][EF_RDF_TYPE][] = array(
-                        'type' => 'uri',
-                        'value' => $pubUri
-                    );
-                } else {
-                    if (!(empty($pubYrFrom)) && !(empty($pubYrTo))) {
-                        $pubUri = $this::NS_BASE . urlencode($pubYrFrom . $$pubYrTo);
-                        $pubYear[$pubYr][EF_RDF_TYPE][] = array(
-                            'type' => 'uri',
-                            'value' => $pubUri
-                        );
-                    } else {
-                        $pubUri = '';
-                    }
-                }
-
-                // save date ranges to link to them from instances during
-                // another foreach loop located at same xml hierarchy level
-                foreach ($reportItem->ItemPerformance as $itemPerformance) {
-                    $perfCategory = (string)$itemPerformance->Category;
-                    $start = (string)$itemPerformance->Period->Begin;
-                    $end = (string)$itemPerformance->Period->End;
-                    // TODO Annika fragen, ob gewollt ist, dass man dann auf der URI bündelt
-                    $dateRangeUri = $this::NS_BASE . 'datarange/' . urlencode($start . $end);
-                    $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'hasPerformance'][] = array(
-                        'type' => 'uri',
-                        'value' => $dateRangeUri
-                    );
-                    $this->_rprtRes[$dateRangeUri][EF_RDF_TYPE][] = array(
-                        'type' => 'uri',
-                        'value' => $this::NS_COUNTR . 'DateRange'
-                    );
-
-                    foreach ($itemPerformance->Instance as $instance) {
-                        $instanceUri = $this::NS_BASE . 'countinginstance/' . md5(rand());
-                        $metricType = (string)$instance->MetricType;
-                        $count = (string)$instance->Count;
-
-                        // link from report item resource
-                        $itemRes[$itemUri][$this::NS_COUNTR . 'hasPerformance'][] = array(
-                            'type' => 'uri',
-                            'value' => $instanceUri
-                        );
-
-                        // write counting instance
-                        $cntngInstance[$instanceUri][EF_RDF_TYPE][] = array(
-                            'type' => 'uri',
-                            'value' => $this::NS_COUNTR . 'CountingInstance'
-                        );
-
-                        if (!(empty($pubUri))) {
-                            $cntngInstance[$instanceUri][$this::NS_COUNTR . 'considersPubYear'][] = array(
-                                'type' => 'uri',
-                                'value' => $pubUri
-                            );
-                        }
-
-                        $cntngInstance[$instanceUri][$this::NS_COUNTR . 'measureForPeriod'][] = array(
-                            'type' => 'uri',
-                            'value' => $dateRangeUri
-                        );
-
-                        if (!(empty($perfCategory))) {
-                            $cntngInstance[$instanceUri][$this::NS_COUNTR . 'hasCategory'][] = array(
-                                'type' => 'uri',
-                                'value' => $this::NS_COUNTR . 'category/' . $perfCategory
-                            );
-                        }
-
-                        $cntngInstance[$instanceUri][$this::NS_COUNTR . 'hasMetricType'][] = array(
-                            'type' => 'uri',
-                            'value' => $this::NS_BASE . 'metrictype/' . $metricType
-                        );
-
-                        $cntngInstance[$instanceUri][$this::NS_COUNTR . 'hasCount'][] = array(
-                            'type' => 'literal',
-                            'value' => $count,
-                            "datatype" => EF_XSD_INTEGER
-                        );
-                    }
-                    // --- End Item Performance ---
-                }
-
-                // --- End Report-Item ---
-            }
-
         }
+
+        $reportsFound = false;
+
+        // Try to find a report node in counter namespace
+        $reports = $xml->children($counterUrl);
+        if (count($reports) !== 0 ) {
+            if (isset($reports->Report)) {
+                $reportsFound = true;
+                foreach ($reports->Report as $report) {
+                    $attributes = $report->attributes();
+                    $this->_writeReport($report, $attributes);
+                }
+            }
+        }
+
+        // If no success try to find reports without namespace
+        if ($reportsFound === false) {
+            $reports = $xml->xpath('//Report');
+            if (!(count($reports) === 0 || $reports === null)) {
+                foreach ($reports as $report) {
+                    if (isset($report->Vendor)) {
+                        $reportsFound = true;
+                        // we are a Report node
+                        if ($report->attributes() !== null) {
+                            $attributes = $report->attributes();
+                            $this->_writeReport($report, $attributes);
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($reportsFound === false) {
+            $this->_owApp->appendSuccessMessage('Nothing imported. No report data found');
+            return;
+        }
+
+        // import statements
 
         // starting action
         $modelIri = (string)$this->_model;
@@ -456,17 +206,9 @@ class CounterimporterController extends OntoWiki_Controller_Component
             $versioning->startAction($actionSpec);
             // TODO write one array if tested from librarians
             $this->_model->addMultipleStatements($this->_rprtRes);
-            $this->_model->addMultipleStatements($itemRes);
-            $this->_model->addMultipleStatements($pltfrmRes);
-            $this->_model->addMultipleStatements($vndrRes);
-            $this->_model->addMultipleStatements($cstmrRes);
-            //$this->_model->addMultipleStatements($orgRes);
-            $this->_model->addMultipleStatements($cntngInstance);
 
-            if (isset($pubYear)) {
-                $this->_model->addMultipleStatements($pubYear);
-            }
             $versioning->endAction();
+
             // Trigger Reindex
             $indexEvent = new Erfurt_Event('onFullreindexAction');
             $indexEvent->trigger();
@@ -479,6 +221,300 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $this->_owApp->appendSuccessMessage('Data successfully imported.');
     }
 
+    private function _writeReport($report, $attributes)
+    {
+        // regular expressions
+        $regISBN = '/\b(?:ISBN(?:: ?| ))?((?:97[89])?\d{9}[\dx])\b/i';
+        $regISSN = '/\d{4}\-\d{3}[\dxX]/';
+
+        // create report uri
+        $this->_reportUri = $this::NS_BASE . 'report/' . md5(rand());
+
+        $this->_rprtRes[$this->_reportUri][EF_RDF_TYPE][] = array(
+            'type' => 'uri',
+            'value' => $this::NS_COUNTR . 'Report'
+        );
+
+        // Check if date is a valid date (string methods used)
+        if (strlen($attributes->Created > 9)) {
+            $substring = substr($attributes->Created, 0, 10);
+            $year = substr($substring, 0, 4);
+            $hyphen1 = substr($substring, 4, 1);
+            $month = substr($substring, 5, 2);
+            $hyphen2 = substr($substring, 7, 1);
+            $day = substr($substring, 8, 2);
+            $test = $hyphen1 . $hyphen2;
+            $dateIsNumeric = false;
+            if (is_numeric($year) && is_numeric($month) && is_numeric($day)) {
+                $dateIsNumeric = true;
+            }
+            if ($dateIsNumeric === true) {
+                if (checkdate($month, $day, $year) === true && $test === '--') {
+                    $date = $year . '-' . $month . '-' . $day;
+                    $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'wasCreatedOn'][] =
+                        array(
+                            'type' => 'literal',
+                            'value' => $date,
+                            'datatype' => $this::NS_XSD . 'date'
+                        );
+                }
+            } else {
+                $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'wasCreatedOn'][] = array(
+                    'type' => 'literal',
+                    'value' => date('c'),
+                    'datatype' => $this::NS_XSD . 'dateTime'
+                );
+            }
+        }
+
+        $value = (string)$attributes->ID;                                           // Report Id
+        if (!(empty($value))) {
+            $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'hasReportID'][] = array(
+                'type' => 'literal',
+                'value' => $value
+            );
+        }
+
+        $value = (string)$attributes->Version;                                 // Report Version
+        if (!(empty($value))) {
+            $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'hasReportVersion'][] = array(
+                'type' => 'literal',
+                'value' => $value
+            );
+        }
+
+        $value = (string)$attributes->Name;                                      // Report Title
+        if (!(empty($value))) {
+            $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'hasReportTitle'][] = array(
+                'type' => 'literal',
+                'value' => $value
+            );
+            $this->_rprtRes[$this->_reportUri][EF_RDFS_LABEL][] = array(
+                'type' => 'literal',
+                'value' => 'Report: ' . $value
+            );
+        }
+
+        // Vendor data
+        $vendor = $report->Vendor;
+        $this->_writeOrganizationData($vendor, 'Vendor');
+
+        // Custumor data
+        $customer = $report->Customer;
+        $this->_writeOrganizationData($customer, 'Customer');
+
+        // Report Items
+        foreach ($customer->ReportItems as $reportItem) {
+            $itemName = (string)$reportItem->ItemName;
+            if (!(empty($itemName))) {
+                $itemUri = $this::NS_BASE . 'reportitem/' . urlencode($itemName);
+            } else {
+                $itemUri = $this::NS_BASE . 'reportitem/' . md5(rand());
+            }
+
+            $this->_rprtRes[$itemUri][EF_RDF_TYPE][] = array(
+                'type' => 'uri',
+                'value' => $this::NS_COUNTR . 'ReportItem'
+            );
+
+            if (!(empty($itemName))) {
+                $this->_rprtRes[$itemUri][EF_RDFS_LABEL][] = array(
+                    'type' => 'literal',
+                    'value' => $itemName
+                );
+            }
+
+            $this->_rprtRes[$itemUri][$this::NS_COUNTR . 'isContainedIn'][] = array(
+                'type' => 'uri',
+                'value' => $this->_reportUri
+            );
+
+            $platform = (string)$reportItem->ItemPlatform;
+
+            if (!(empty($platform))) {
+                $platformUri = $this::NS_BASE . 'platform/' . urlencode($platform);
+                $this->_rprtRes[$platformUri][EF_RDF_TYPE][] = array(
+                    'type' => 'uri',
+                    'value' => $this::NS_COUNTR . 'Platform'
+                );
+
+                $this->_rprtRes[$platformUri][$this::NS_SKOS . 'altLabel'][] = array(
+                    'type' => 'literal',
+                    'value' => $platform
+                );
+
+                $this->_rprtRes[$itemUri][$this::NS_COUNTR . 'isAccessibleVia'][] = array(
+                    'type' => 'uri',
+                    'value' => $platformUri
+                );
+            }
+
+            $itemPublisher = (string)$reportItem->ItemPublisher;
+            if (!(empty($itemPublisher))) {
+                // TODO Match
+                $publisherUri = $this::NS_BASE . 'publisher/' . urlencode($itemPublisher);
+                $this->_rprtRes[$publisherUri][EF_RDF_TYPE][] = array(
+                    'type' => 'uri',
+                    'value' => $this::NS_COUNTR . 'Publisher'
+                );
+
+                $this->_rprtRes[$itemUri][$this::NS_DC . 'publisher'][] = array(
+                    'type' => 'uri',
+                    'value' => $publisherUri
+                );
+            }
+
+            $itemDataType = (string)$reportItem->ItemDataType;
+            if (!(empty($itemPublisher))) {
+                $this->_rprtRes[$itemUri][$this::NS_COUNTR . 'hasItemDataType'][] = array(
+                    'type' => 'uri',
+                    'value' => $this::NS_COUNTR . $itemDataType
+                );
+            }
+
+            foreach ($reportItem->ItemIdentifier as $itemIdentifier) {
+                $itemIdValue = (string)$itemIdentifier->Value;
+                $itemIdType = (string)$itemIdentifier->Type;
+                if (!(empty($itemIdValue))) {
+                    if (!(empty($itemIdType))) {
+                        $pred = '';
+                        switch (strtolower($itemIdType)) {
+                            case 'doi':
+                                if (substr($itemIdValue, 0, 3) === '10.') {
+                                    $uri = 'http://doi.org/' . $itemIdValue;
+                                    $pred = $this::NS_AMSL . 'doi';
+                                } else
+                                    break;
+                            case 'online_issn':
+                                if (preg_match($regISSN, $itemIdValue)) {
+                                    $uri = 'urn:ISSN:' . $itemIdValue;
+                                    $pred = $this::NS_AMSL . 'eissn';
+                                }
+                                break;
+                            case 'print_issn':
+                                if (preg_match($regISSN, $itemIdValue)) {
+                                    $uri = 'urn:ISSN:' . $itemIdValue;
+                                    $pred = $this::NS_AMSL . 'pissn';
+                                }
+                                break;
+                            case 'online_isbn':
+                                if (preg_match($regISBN, $itemIdValue)) {
+                                    $uri = 'urn:ISBN:' . $itemIdValue;
+                                    $pred = $this::NS_AMSL . 'eisbn';
+                                }
+                                break;
+                            case 'print_isbn':
+                                if (preg_match($regISBN, $itemIdValue)) {
+                                    $uri = 'urn:ISBN:' . $itemIdValue;
+                                    $pred = $this::NS_AMSL . 'pisbn';
+                                }
+                                break;
+                            case 'proprietaryID':
+                                if (preg_match($regISBN, $itemIdValue)) {
+                                    $uri = $this::NS_BASE . 'ProprietaryID/' . $itemIdValue;
+                                    $pred = $this::NS_AMSL . 'proprietaryId';
+                                }
+                                break;
+                        }
+                        if ($pred !== '') {
+                            $this->_rprtRes[$itemUri][$pred][] = array(
+                                'type' => 'uri',
+                                'value' => $uri
+                            );
+                        }
+                    }
+                }
+            }
+
+            $pubYr = (string)$reportItem->ItemPerformance->PubYr;
+            $pubYrFrom = (string)$reportItem->ItemPerformance->PubYrFrom;
+            $pubYrTo = (string)$reportItem->ItemPerformance->PubYrTo;
+            if (!(empty($pubYr))) {
+                $pubUri = $this::NS_BASE . urlencode($pubYr);
+                $this->_rprtRes[$pubYr][EF_RDF_TYPE][] = array(
+                    'type' => 'uri',
+                    'value' => $pubUri
+                );
+            } else {
+                if (!(empty($pubYrFrom)) && !(empty($pubYrTo))) {
+                    $pubUri = $this::NS_BASE . urlencode($pubYrFrom . $$pubYrTo);
+                    $this->_rprtRes[$pubYr][EF_RDF_TYPE][] = array(
+                        'type' => 'uri',
+                        'value' => $pubUri
+                    );
+                } else {
+                    $pubUri = '';
+                }
+            }
+
+            // save date ranges to link to them from instances during
+            // another foreach loop located at same xml hierarchy level
+            foreach ($reportItem->ItemPerformance as $itemPerformance) {
+                $perfCategory = (string)$itemPerformance->Category;
+                $start = (string)$itemPerformance->Period->Begin;
+                $end = (string)$itemPerformance->Period->End;
+                // TODO Annika fragen, ob gewollt ist, dass man dann auf der URI bündelt
+                $dateRangeUri = $this::NS_BASE . 'datarange/' . urlencode($start . $end);
+                $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'hasPerformance'][] = array(
+                    'type' => 'uri',
+                    'value' => $dateRangeUri
+                );
+                $this->_rprtRes[$dateRangeUri][EF_RDF_TYPE][] = array(
+                    'type' => 'uri',
+                    'value' => $this::NS_COUNTR . 'DateRange'
+                );
+
+                foreach ($itemPerformance->Instance as $instance) {
+                    $instanceUri = $this::NS_BASE . 'countinginstance/' . md5(rand());
+                    $metricType = (string)$instance->MetricType;
+                    $count = (string)$instance->Count;
+
+                    // link from report item resource
+                    $this->_rprtRes[$itemUri][$this::NS_COUNTR . 'hasPerformance'][] = array(
+                        'type' => 'uri',
+                        'value' => $instanceUri
+                    );
+
+                    // write counting instance
+                    $this->_rprtRes[$instanceUri][EF_RDF_TYPE][] = array(
+                        'type' => 'uri',
+                        'value' => $this::NS_COUNTR . 'CountingInstance'
+                    );
+
+                    if (!(empty($pubUri))) {
+                        $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'considersPubYear'][] = array(
+                            'type' => 'uri',
+                            'value' => $pubUri
+                        );
+                    }
+
+                    $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'measureForPeriod'][] = array(
+                        'type' => 'uri',
+                        'value' => $dateRangeUri
+                    );
+
+                    if (!(empty($perfCategory))) {
+                        $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'hasCategory'][] = array(
+                            'type' => 'uri',
+                            'value' => $this::NS_COUNTR . 'category/' . $perfCategory
+                        );
+                    }
+
+                    $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'hasMetricType'][] = array(
+                        'type' => 'uri',
+                        'value' => $this::NS_BASE . 'metrictype/' . $metricType
+                    );
+
+                    $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'hasCount'][] = array(
+                        'type' => 'literal',
+                        'value' => $count,
+                        "datatype" => EF_XSD_INTEGER
+                    );
+                }
+            }
+        }
+    }
+
     /**
      * This method searches for organizations and their labels
      * It creates 2 arrays. One can be used for levenshtein matching
@@ -488,8 +524,6 @@ class CounterimporterController extends OntoWiki_Controller_Component
         if ($this->_model === null) {
             return;
         }
-
-        // Set namespaces
 
         $query = 'SELECT DISTINCT *  WHERE {' . PHP_EOL ;
         $query.= '  ?org a <' . $this::NS_FOAF . 'Organization> .' . PHP_EOL;
@@ -507,7 +541,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 // Write data used for matching
                 $organizations[$organization['org']]['org'] = $organization['org'];
 
-                // Write data uses for js suggestions
+                // Write data used for js suggestions
                 if (!(empty($organization['cntrName']))) {
                     $value = $organization['cntrName'];
                     $organizations[$organization['org']]['cntrName'] = $organization['cntrName'];
@@ -562,7 +596,6 @@ class CounterimporterController extends OntoWiki_Controller_Component
      * organization URI
      */
     private function _matchOrganization($orgName) {
-        //$publisherList = array("Ablex","Academic Press","Addison-Wesley","American Association of University Presses (AAUP)","American Scientific Publishers","Apple Academic Press","Anthem Press","Avon Books ","Ballantine","Bantam Books ","Basic Books ","John Benjamins","Blackwell ","Blackwell Publishers","Cambridge International Science Publishing","Cambridge University Press","Chapman & Hall ","Charles River Media","Collamore ","Columbia University Press ","Cornell Univ Press ","EDP","Ellis Horwood ","Elsevier Science","Erlbaum","Free Press ","W.H.Freeman ","Guilford","Harper Collins ","Harvard University Press","Hemisphere ","Holt","Houghton Mifflin ","Hyperion ","International Universities Press","IOS Press","Karger","Kluwer Academic ","Lawrence Erlbaum","Libertas Academica","McGraw-Hill","Macmillan Publishing","Macmillan Computer Publishing USA","McGraw-Hill","MIT Press","Morgan Kaufman","North Holland","W.W. Norton ","O'Reilly","Oxford University Press","Pantheon ","Penguin","Pergamon Press ","Plenum Publishing","PLOS ","Prentice Hall","Princeton University Press","Psychology Press ","Random House","Rift Publishing House","Routledge ","Rutgers University Press","Scientia Press","Simon & Schuster","Simon & Schuster Interactive","SPIE","Springer Verlag","Stanford University Press","Touchstone ","University of California Press","University of Chicago Press ","Van Nostrand Reinhold ","Wiley","John Wiley","World Scientific Publishing ","Yale University Press 302 Temple St","Yourdon");
 
         if ($this->_organizations !== null) {
             $lev4All[$this::NS_VCARD . 'organization-name'] = 0;
@@ -655,13 +688,14 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $organizationId      = (string)$organization->ID;
         $organizationWebSite = (string)$organization->WebSiteUrl;
         $organizationLogoUrl = (string)$organization->LogoUrl;
-        $contactType         = (string)$contact->Contact;
-        $contactMail         = (string)$contact->{'E-mail'};
+        if ($contact !== null) {
+            $contactType = (string)$contact->Contact;
+            $contactMail = (string)$contact->{'E-mail'};
+        }
 
         // Find a customer URI
         if (!(empty($organizationName))) {
             $organizationUri = $this::NS_BASE . 'organization/' . urlencode($organizationName);
-            // TODO: write link from matched resource to report resource
             $bestMatch = $this->_matchOrganization($organizationName);
             $this->_writeOrganizationMatches($bestMatch, $type);
         } else {
@@ -677,40 +711,40 @@ class CounterimporterController extends OntoWiki_Controller_Component
         }
 
         if (!(empty($organizationUri))) {
-            $orgRes[$organizationUri][EF_RDF_TYPE][] = array(
+            $this->_rprtRes[$organizationUri][EF_RDF_TYPE][] = array(
                 'type' => 'uri',
                 'value' => $this::NS_FOAF . 'Organization'
             );
 
-            $orgRes[$organizationUri][EF_RDF_TYPE][] = array(
+            $this->_rprtRes[$organizationUri][EF_RDF_TYPE][] = array(
                 'type' => 'uri',
                 'value' => $this::NS_COUNTR . 'Customer'
             );
 
-            $orgRes[$organizationUri][$this::NS_COUNTR . $predicate][] = array(
+            $this->_rprtRes[$organizationUri][$this::NS_COUNTR . $predicate][] = array(
                 'type' => 'uri',
                 'value' => $this->_reportUri
             );
 
-            $orgRes[$organizationUri][$this::NS_SKOS . 'altLabel'][] = array(
+            $this->_rprtRes[$organizationUri][$this::NS_SKOS . 'altLabel'][] = array(
                 'type' => 'literal',
                 'value' => $organizationName . ' [COUNTER]'
             );
 
-            $orgRes[$organizationUri][$this::NS_VCARD . 'organization-name'][] = array(
+            $this->_rprtRes[$organizationUri][$this::NS_VCARD . 'organization-name'][] = array(
                 'type' => 'literal',
                 'value' => $organizationName . ' [COUNTER]'
             );
 
             if (!(empty($organizationWebSite))) {
-                $orgRes[$organizationUri][$this::NS_VCARD . 'hasURL'][] = array(
+                $this->_rprtRes[$organizationUri][$this::NS_VCARD . 'hasURL'][] = array(
                     'type' => 'literal',
                     'value' => $organizationWebSite
                 );
             };
 
             if (!(empty($organizationID))) {
-                $orgRes[$organizationUri][$this::NS_COUNTR . 'hasOrganizationID'][] = array(
+                $this->_rprtRes[$organizationUri][$this::NS_COUNTR . 'hasOrganizationID'][] = array(
                     'type' => 'literal',
                     'value' => $organizationID
                 );
@@ -722,18 +756,18 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 }
                 // TODO Evtl. noch auf URI (Errfurt) überprüfen, allerdings weiß ich nicht,
                 // ob mailto erkannt wird
-                $orgRes[$organizationUri][$this::NS_VCARD . 'hasEmail'][] = array(
+                $this->_rprtRes[$organizationUri][$this::NS_VCARD . 'hasEmail'][] = array(
                     'type' => 'uri',
                     'value' => $contactMail
                 );
 
                 if (!(empty($contactType))) {
-                    $orgRes[$contactMail][EF_RDFS_COMMENT][] = array(
+                    $this->_rprtRes[$contactMail][EF_RDFS_COMMENT][] = array(
                         'type' => 'literal',
                         'value' => $contactType . ' [COUNTER]'
                     );
                 } else {
-                    $orgRes[$contactMail][EF_RDFS_COMMENT][] = array(
+                    $this->_rprtRes[$contactMail][EF_RDFS_COMMENT][] = array(
                         'type' => 'literal',
                         'value' => 'No further information given [COUNTER]'
                     );
@@ -741,13 +775,13 @@ class CounterimporterController extends OntoWiki_Controller_Component
             };
 
             if (!(empty($organizationLogoUrl))) {
-                $orgRes[$organizationUri][$this::NS_COUNTR . 'hasLogoUrl'][] = array(
+                $this->_rprtRes[$organizationUri][$this::NS_COUNTR . 'hasLogoUrl'][] = array(
                     'type' => 'literal',
                     'value' => $organizationLogoUrl
                 );
             }
         }
-        return $orgRes;
+        return;
     }
 
     /**
@@ -826,7 +860,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $rqstrID = null;
         $rqstrName = null;
         $rqstrMail = null;
-        $cstmrID = null;
+        $cstmrID = '12345';
         $startDate = null;
         $endDate = null;
         $fltr = array();
