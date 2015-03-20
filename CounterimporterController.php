@@ -18,6 +18,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
     private $_model              = null;
     private $_post               = null;
     private $_organizations      = null;
+    private $_sushiSettings      = null;
     private $_autocompletionData = null;
     private $_rprtRes            = null;
     private $_reportUri          = null;
@@ -429,22 +430,36 @@ class CounterimporterController extends OntoWiki_Controller_Component
             $pubYr = (string)$reportItem->ItemPerformance->PubYr;
             $pubYrFrom = (string)$reportItem->ItemPerformance->PubYrFrom;
             $pubYrTo = (string)$reportItem->ItemPerformance->PubYrTo;
-            if (!(empty($pubYr))) {
-                $pubUri = $this::NS_BASE . urlencode($pubYr);
-                $this->_rprtRes[$pubYr][EF_RDF_TYPE][] = array(
-                    'type' => 'uri',
-                    'value' => $pubUri
-                );
+            if (!(empty($pubYrFrom)) && !(empty($pubYrTo))) {
+                $pubYrFrom = $pubYrFrom . '-01-01';
+                $pubYrTo = $pubYrTo . '-12-31';
+                $pubUri = $this::NS_BASE . 'daterange/' . urlencode($pubYrFrom . '-' . $pubYrTo);
             } else {
-                if (!(empty($pubYrFrom)) && !(empty($pubYrTo))) {
-                    $pubUri = $this::NS_BASE . urlencode($pubYrFrom . $$pubYrTo);
-                    $this->_rprtRes[$pubYr][EF_RDF_TYPE][] = array(
-                        'type' => 'uri',
-                        'value' => $pubUri
-                    );
+                if (!(empty($pubYr))) {
+                    $pubYrFrom = $pubYr . '-01-01';
+                    $pubYrTo = $pubYr . '-12-31';
+                    $pubUri = $this::NS_BASE . 'daterange/' . urlencode($pubYrFrom . '-' . $pubYrTo);
                 } else {
                     $pubUri = '';
                 }
+            }
+            if ($pubUri !== '') {
+                $this->_rprtRes[$pubUri][EF_RDF_TYPE][] = array(
+                    'type' => 'uri',
+                    'value' => $this::NS_COUNTR . 'DateRange'
+                );
+                $this->_rprtRes[$pubUri][EF_RDFS_LABEL][] = array(
+                    'type' => 'literal',
+                    'value' => 'DateRange: ' . $pubYrFrom . ' - ' . $pubYrTo
+                );
+                $this->_rprtRes[$pubUri][$this::NS_COUNTR . 'hasStartDay'][] = array(
+                    'type' => 'literal',
+                    'value' => $pubYrFrom
+                );
+                $this->_rprtRes[$pubUri][$this::NS_COUNTR . 'hasEndDay'][] = array(
+                    'type' => 'literal',
+                    'value' => $pubYrTo
+                );
             }
 
             // save date ranges to link to them from instances during
@@ -453,8 +468,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 $perfCategory = (string)$itemPerformance->Category;
                 $start = (string)$itemPerformance->Period->Begin;
                 $end = (string)$itemPerformance->Period->End;
-                // TODO Annika fragen, ob gewollt ist, dass man dann auf der URI bündelt
-                $dateRangeUri = $this::NS_BASE . 'datarange/' . urlencode($start . $end);
+                $dateRangeUri = $this::NS_BASE . 'daterange/' . urlencode($start . '-' . $end);
                 $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'hasPerformance'][] = array(
                     'type' => 'uri',
                     'value' => $dateRangeUri
@@ -462,6 +476,18 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 $this->_rprtRes[$dateRangeUri][EF_RDF_TYPE][] = array(
                     'type' => 'uri',
                     'value' => $this::NS_COUNTR . 'DateRange'
+                );
+                $this->_rprtRes[$dateRangeUri][EF_RDFS_LABEL][] = array(
+                    'type' => 'literal',
+                    'value' => 'DateRange: ' . $start . ' - ' . $end
+                );
+                $this->_rprtRes[$dateRangeUri][$this::NS_COUNTR . 'hasStartDay'][] = array(
+                    'type' => 'literal',
+                    'value' => $start
+                );
+                $this->_rprtRes[$dateRangeUri][$this::NS_COUNTR . 'hasEndDay'][] = array(
+                    'type' => 'literal',
+                    'value' => $end
                 );
 
                 foreach ($itemPerformance->Instance as $instance) {
@@ -481,7 +507,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
                         'value' => $this::NS_COUNTR . 'CountingInstance'
                     );
 
-                    if (!(empty($pubUri))) {
+                    if ($pubUri !== '') {
                         $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'considersPubYear'][] = array(
                             'type' => 'uri',
                             'value' => $pubUri
@@ -665,7 +691,6 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 $result[$key] = $this->_super_unique($value);
             }
         }
-
         return $result;
     }
 
@@ -848,7 +873,13 @@ class CounterimporterController extends OntoWiki_Controller_Component
        return;
     }
 
-    public function writexmlAction () {
+    public function onSushiImportAction ($event) {
+        $store  = Erfurt_App::getInstance()->getStore();
+        $config = Erfurt_App::getInstance()->getConfig();
+
+        $this->_model       = $event->selectedModel;
+        $resourceUri        = $event->resourceUri;
+
         //TODO add access control
         //TODO add post parameter
 
@@ -857,6 +888,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $this->_helper->layout->disableLayout();
 
         // TODO Variables must be filled with values found in amsl store or post request
+        $params = $this->_getSushiParams($resourceUri);
         $rqstrID = null;
         $rqstrName = null;
         $rqstrMail = null;
@@ -917,7 +949,6 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $begin = $dom->createElement('sus:Begin',date('Y-m-d'));
         $end = $dom->createElement('sus:End',date('Y-m-d'));
 
-
         // Build domtree
         $envelope->appendChild($header);
         $header->appendChild($body);
@@ -937,6 +968,31 @@ class CounterimporterController extends OntoWiki_Controller_Component
         return;
         // debug;
         //echo $dom->saveXML();
+    }
+
+    private function _setAllSushiData () {
+        $query = 'SELECT DISTINCT ?sushi ?p ?o  WHERE {' . PHP_EOL ;
+        $query.= '?sushi a <' . $this::NS_TERMS . 'SushiSetting> .' . PHP_EOL;
+        $query.= '?sushi ?p ?o .' . PHP_EOL;
+        $query.= '}' . PHP_EOL;
+
+        $result = $this->_model->sparqlQuery($query);
+        if (count($result) > 0) {
+            $this->_sushiSettings = $result;
+        }
+
+    }
+
+    private function _getSushiParams($resourceUri) {
+
+        if ($this->_sushiSettings !== null && isset($this->_sushiSettings[$resourceUri])) {
+            foreach ($this->_sushiSettings as $result) {
+                if (isset($result[$resourceUri])) {
+                    return $result[$resourceUri];
+                }
+            }
+        }
+        return false;
     }
 }
 

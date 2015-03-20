@@ -12,6 +12,7 @@
   doap:name "counterimporter" ;
   owconfig:privateNamespace <http://ns.ontowiki.net/Extensions/counterimporter/> ;
   owconfig:pluginEvent event:onProvideImportActions ;
+  owconfig:pluginEvent event:onSushiImportAction ;
   owconfig:enabled "false"^^xsd:boolean ;
   rdfs:label "Counter XML Importer" ;
   doap:description "Imports a Counter XML File" ;
