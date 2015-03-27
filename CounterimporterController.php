@@ -6,6 +6,7 @@
  * @license   http://opensource.org/licenses/gpl-license.php GNU General Public License (GPL)
  */
 
+    require realpath(dirname(__FILE__)) . '/../fulltextsearch/libraries/vendor/autoload.php';
 /**
  * Controller for OntoWiki Basicimporter Extension
  *
@@ -15,16 +16,18 @@
  */
 class CounterimporterController extends OntoWiki_Controller_Component
 {
-    private $_model              = null;
-    private $_post               = null;
-    private $_organizations      = null;
-    private $_sushiSettings      = null;
-    private $_autocompletionData = null;
-    private $_rprtRes            = null;
-    private $_reportUri          = null;
+    private $_model                = null;
+    private $_post                 = null;
+    private $_organizations        = null;
+    private $_organizationJSONData = null;
+    private $_sushiSettings        = null;
+    private $_sushiJSONData        = null;
+    private $_rprtRes              = null;
+    private $_reportUri            = null;
 
     // some namespaces
     const NS_AMSL   = 'http://vocab.ub.uni-leipzig.de/amsl/';
+    const NS_SUSHI  = 'http://vocab.ub.uni-leipzig.de/sushi/';
     const NS_BASE   = 'http://amsl.technology/counter/resource/';
     const NS_COUNTR = 'http://vocab.ub.uni-leipzig.de/counter/';
     const NS_DC     = 'http://purl.org/dc/elements/1.1/';
@@ -51,13 +54,6 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $this->view->formName         = 'importdata';
         $this->view->supportedFormats = $this->_erfurt->getStore()->getSupportedImportFormats();
 
-        $this->view->headScript()->appendFile($this->_config->urlBase .
-            'extensions/counterimporter/templates/counterimporter/js/typeahead.bundle.js');
-        $this->view->headScript()->appendFile($this->_config->urlBase .
-            'extensions/counterimporter/templates/counterimporter/js/search.js');
-        $this->view->headLink()->appendStylesheet($this->_config->urlBase .
-            'extensions/counterimporter/templates/counterimporter/css/counter.css');
-
         $this->_owApp = OntoWiki::getInstance();
         $this->_model = $this->_owApp->selectedModel;
 
@@ -71,33 +67,87 @@ class CounterimporterController extends OntoWiki_Controller_Component
             array('name' => 'Cancel', 'id' => 'importdata')
         );
         $this->view->placeholder('main.window.toolbar')->set($toolbar);
-        OntoWiki::getInstance()->getNavigation()->disableNavigation();
 
-        if ($this->_request->isPost()) {
-            $this->_post = $this->_request->getPost();
-        }
-        $this->_setOrganizations();
+
+        // setup the navigation
+        OntoWiki::getInstance()->getNavigation()->reset();
+        OntoWiki::getInstance()->getNavigation()->register(
+            'xmluploader',
+            array(
+                'controller' => 'counterimporter',
+                'action' => 'counterxml',
+                'name' => 'Upload a COUNTER XML file',
+                'position' => 0,
+                'active' => true
+            )
+        );
+
+        OntoWiki::getInstance()->getNavigation()->register(
+            'sushipicker',
+            array(
+                'controller' => 'counterimporter',
+                'action' => 'sushixml',
+                'name' => 'Import COUNTER data with SUSHI',
+                'position' => 1,
+                'active' => false
+            )
+        );
     }
 
     /**
-     * This action will return a json_encoded array
+     * This action will return a json_encoded array containing organization lookup data for JS
      */
     public function getorganizationsAction()
     {
-
         // tells the OntoWiki to not apply the template to this action
         $this->_helper->viewRenderer->setNoRender();
         $this->_helper->layout->disableLayout();
 
-        if ($this->_autocompletionData === null) {
-            $this->_setOrganizations();
+        if ($this->_organizationJSONData === null) {
+            $this->_setOrganizationJSONData();
         }
 
-        $this->_response->setBody($this->_autocompletionData);
+        $this->_response->setBody($this->_organizationJSONData);
     }
 
     /**
-     * The main method. Parses a given counter xml file and writes triples to the store
+     * This action will return a json_encoded array cotaining SUSHI lookup data for JS
+     */
+    public function getsushiAction()
+    {
+        // tells the OntoWiki to not apply the template to this action
+        $this->_helper->viewRenderer->setNoRender();
+        $this->_helper->layout->disableLayout();
+
+        if ($this->_sushiJSONData === null) {
+            $this->_setSushiJSONData();
+        }
+
+        $this->_response->setBody($this->_sushiJSONData);
+    }
+
+    /**
+     * This action will fetch COUNTER XML with help of SUSHI protocol
+     * After fetching the XML
+     */
+    public function sushixmlAction()
+    {
+        $this->view->placeholder('main.window.title')->set('Please select your SUSHI vendor');
+        if ($this->_request->isPost()) {
+            $post = $this->_request->getPost();
+            $sushiUri = $post['sushi-input'];
+            if (Erfurt_Uri::check($sushiUri)) {
+                $this->_sushiImport($sushiUri);
+            } else {
+                $msg = 'The given URI is not valid. Please check if there are typos and try again';
+                $this->_owApp->appendErrorMessage($msg);
+                return;
+            }
+        }
+    }
+
+    /**
+     * The COUNTER XML upload method. Uploads a COUNTER xml file and calls import method
      */
     public function counterxmlAction()
     {
@@ -130,29 +180,46 @@ class CounterimporterController extends OntoWiki_Controller_Component
             }
 
             $file = $filesArray['source']['tmp_name'];
+
             // setting permissions to read the tempfile for everybody
             // (e.g. if db and webserver owned by different users)
             chmod($file, 0644);
+            $xmlstr = file_get_contents($file);
+            $this->_prepareXml ($xmlstr);
         } else {
             return;
         }
+    }
 
-
+    /**
+     * This method expects a XML string containing COUNTER data
+     * @param $xmlstr
+     */
+    private function _prepareXml ($xmlstr) {
         // READING XML file
-        $xmlstr = file_get_contents($file);
         $xmlstr = str_replace('xmlns=', 'ns=', $xmlstr);
         $xml = new SimpleXMLElement($xmlstr);
         $counterUrl = 'http://www.niso.org/schemas/counter';
         $ns = $xml->getDocNamespaces(true);
         if (count($ns) != 0) {
-            if (isset($ns['xmlns']) && $ns['xmlns'] === $counterUrl) {
+            /* if (isset($ns['xmlns']) && $ns['xmlns'] === $counterUrl) {
                 $implicit = true;
-            }
+            }*/
 
+            /*
             if (in_array($counterUrl, $ns)) {
                 $flippedNs = array_flip($ns);
                 $counterNS = $flippedNs[$counterUrl];
-                $xml->registerXPathNamespace($counterNS, 'http://www.niso.org/schemas/counter');
+                $xml->registerXPathNamespace($counterNS, $counterUrl);
+            }
+            */
+        }
+
+        $error = $xml->xpath('//Message');
+        if (count($error > 0)) {
+            $out = 'The returned XML contains information that may help you: ' ;
+            foreach ($error as $key => $message) {
+                $out .= '"' . (string)$message . '"' . PHP_EOL;
             }
         }
 
@@ -180,24 +247,30 @@ class CounterimporterController extends OntoWiki_Controller_Component
                         // we are a Report node
                         if ($report->attributes() !== null) {
                             $attributes = $report->attributes();
-                            $this->_writeReport($report, $attributes);
+                            $dataWritten = $this->_writeReport($report, $attributes);
                         }
                     }
                 }
             }
         }
 
+        // If we reach this point, no COUNTER reports were found in XML
+        // We throw a message and exit
         if ($reportsFound === false) {
-            $this->_owApp->appendSuccessMessage('Nothing imported. No report data found');
+            $this->_owApp->appendErrorMessage('Nothing imported. No report data found');
+            if (isset($out)) {
+                $this->_owApp->appendErrorMessage($out);
+            }
             return;
         }
 
+        // $reportFound === true
         // import statements
 
         // starting action
         $modelIri = (string)$this->_model;
         $versioning = $this->_erfurt->getVersioning();
-        // action spec for versioninghnology/counter
+        // action spec for versioning
         $actionSpec = array();
         $actionSpec['type'] = 11;
         $actionSpec['modeluri'] = $modelIri;
@@ -384,8 +457,8 @@ class CounterimporterController extends OntoWiki_Controller_Component
                                 if (substr($itemIdValue, 0, 3) === '10.') {
                                     $uri = 'http://doi.org/' . $itemIdValue;
                                     $pred = $this::NS_AMSL . 'doi';
-                                } else
-                                    break;
+                                }
+                                break;
                             case 'online_issn':
                                 if (preg_match($regISSN, $itemIdValue)) {
                                     $uri = 'urn:ISSN:' . $itemIdValue;
@@ -542,9 +615,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
     }
 
     /**
-     * This method searches for organizations and their labels
-     * It creates 2 arrays. One can be used for levenshtein matching
-     * the other for suggestion engine via javascript
+     * This method searches for organizations and their different kind of labels
      */
     private function _setOrganizations() {
         if ($this->_model === null) {
@@ -561,56 +632,54 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $result = $this->_model->sparqlQuery($query);
 
         $organizations = array();
-        $temp = array();
         if (count($result) > 0) {
             foreach ($result as $key => $organization) {
                 // Write data used for matching
                 $organizations[$organization['org']]['org'] = $organization['org'];
 
-                // Write data used for js suggestions
                 if (!(empty($organization['cntrName']))) {
-                    $value = $organization['cntrName'];
-                    $organizations[$organization['org']]['cntrName'] = $organization['cntrName'];
-                } else {
-                    if (!(isset($organizations[$organization['org']]['cntrName']))) {
-                        $organizations[$organization['org']]['cntrName'] = '';
-                    }
-                }
-                if (!(empty($organization['label']))) {
-                    $value = $organization['label'];
-                    $organizations[$organization['org']]['label'] = $organization['label'];
-                } else {
-                    if (!(isset($organizations[$organization['org']]['label']))) {
-                        $organizations[$organization['org']]['label'] = '';
-                    }
-                }
-                if (!(empty($organization['name']))) {
-                    $value = $organization['name'];
-                    $organizations[$organization['org']]['name'] = $organization['name'];
-                } else {
-                    if (!(isset($organizations[$organization['org']]['name']))) {
-                        $organizations[$organization['org']]['name'] = '';
-                    }
+                    $organizations[$organization['org']]['cntrName'][] = $organization['cntrName'];
                 }
 
-                $temp[] = array(
-                    'org' => $organization['org'],
-                    'label' => $value
-                );
+                if (!(empty($organization['label']))) {
+                    $organizations[$organization['org']]['label'][] = $organization['label'];
+                }
+
+                if (!(empty($organization['name']))) {
+                    $organizations[$organization['org']]['name'][] = $organization['name'];
+                }
             }
-            $this->_organizations = $organizations;
-            // Delete duplicates -> returns an associative array
-            $temp = $this->_super_unique($temp);
-            // Create a new non associative array
-            $json = array();
-            foreach ($temp as $value) {
-                $json[] = $value;
-            }
-            $this->_autocompletionData = json_encode($json);
-        } else {
-            $this->_autocompletionData = json_encode($temp);
-            $this->_organizations = null;
         }
+        $this->_organizations = $organizations;
+    }
+
+    private function _setOrganizationJSONData () {
+        if ($this->_organizations === null) {
+            $this->_setOrganizations();
+        }
+
+        $temp = array();
+        foreach ($this->_organizations as $key => $value) {
+            foreach ($value as $key2 =>$labels) {
+                if ($key2 !== 'org' && (count($labels) > 0)) {
+                    foreach ($labels as $label) {
+                        $temp[] = array(
+                            'org' => $key,
+                            'label' => $label
+                        );
+                    }
+                }
+            }
+        }
+
+        // Delete duplicates -> returns an associative array
+        $temp = $this->_super_unique($temp);
+        // Create a new non associative array
+        $json = array();
+        foreach ($temp as $value) {
+            $json[] = $value;
+        }
+        $this->_organizationJSONData = json_encode($json);
     }
 
 
@@ -869,32 +938,41 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
 
     public function fetchCounterReport ($interfaceUri) {
-
        return;
     }
 
     public function onSushiImportAction ($event) {
+        // TODO
+    }
+
+    private function _sushiImport ($resourceUri) {
         $store  = Erfurt_App::getInstance()->getStore();
         $config = Erfurt_App::getInstance()->getConfig();
 
-        $this->_model       = $event->selectedModel;
-        $resourceUri        = $event->resourceUri;
+        //$this->_model       = $event->selectedModel;
+        //$resourceUri        = $event->resourceUri;
 
         //TODO add access control
         //TODO add post parameter
 
         // tells the OntoWiki to not apply the template to this action
-        $this->_helper->viewRenderer->setNoRender();
-        $this->_helper->layout->disableLayout();
+        //$this->_helper->viewRenderer->setNoRender();
+        //$this->_helper->layout->disableLayout();
 
         // TODO Variables must be filled with values found in amsl store or post request
-        $params = $this->_getSushiParams($resourceUri);
-        $rqstrID = null;
-        $rqstrName = null;
-        $rqstrMail = null;
-        $cstmrID = '12345';
-        $startDate = null;
-        $endDate = null;
+        $sushiData = $this->_getSushiParams($resourceUri);
+        $sushiUrl = $sushiData[$this::NS_SUSHI . 'hasSushiUrl'];
+        $rqstrID = $sushiData[$this::NS_SUSHI . 'hasSushiRequestorID'];
+        $rqstrName = $sushiData[$this::NS_SUSHI . 'hasSushiRequestorName'];
+        $rqstrMail = $sushiData[$this::NS_SUSHI . 'hasSushiRequestorMail'];
+        $cstmrID = $sushiData[$this::NS_SUSHI . 'hasSushiCustomerID'];
+        $rprtName = $sushiData[$this::NS_SUSHI . 'hasSushiReportName'][0];
+        $rprtRelease = $sushiData[$this::NS_SUSHI . 'hasSushiReportRelease'];
+        if (isset($sushiData[$this::NS_SUSHI . 'lastSuccessfullRequest'])) {
+            // TODO
+        }
+        $startDate = '2015-01-01';
+        $endDate = '2015-03-31';
         $fltr = array();
 
         $dom = new DOMDocument('1.0', 'utf-8');
@@ -908,7 +986,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
         );
         $envelope->setAttributeNS(
             'http://www.w3.org/2000/xmlns/',
-            'xmlns:coun',
+            'xmlns:count',
             'http://www.niso.org/schemas/sushi/counter'
         );
         $envelope->setAttributeNS(
@@ -920,21 +998,22 @@ class CounterimporterController extends OntoWiki_Controller_Component
         // TODO find candidates that can be outsourced in a seperate method
         $header = $dom->createElement('soap:Header');
         $body = $dom->createElement('soap:Body');
-        $reportRequest = $dom->createElement('coun:ReportRequest');
-        $reportRequest->setAttribute('ID', '007');
+        $reportRequest = $dom->createElement('count:ReportRequest');
+        $reportRequest->setAttribute('ID', 'Counter Report Request');
         $reportRequest->setAttribute('Created', date('c'));
 
         // Data of requestor
         $requestor = $dom->createElement('sus:Requestor');
-        $requestorID = $dom->createElement('sus:ID', '012345678-9');
-        $requestorName = $dom->createElement('sus:Name', 'Das Zahlenwesen');
-        $requestorMail = $dom->createElement('sus:Email', 'zahlenwesen@univ.org');
+        $requestorID = $dom->createElement('sus:ID', $rqstrID);
+        $requestorName = $dom->createElement('sus:Name', $rqstrName);
+        $requestorMail = $dom->createElement('sus:Email', $rqstrMail);
         // Data of customer
         $customer = $dom->createElement('sus:CustomerReference');
         $customerID = $dom->createElement('sus:ID', $cstmrID);
         $report = $dom->createElement('sus:ReportDefinition');
-        $report->setAttribute('Name', 'TestNAME');
-        $report->setAttribute('Release', '4.0');
+        $report->setAttribute('Name', $rprtName);
+        //$report->setAttribute('Release', $rprtRelease);
+        $report->setAttribute('Release', '7');
 
         // Filter
         $filter = $dom->createElement('sus:Filters');
@@ -946,12 +1025,12 @@ class CounterimporterController extends OntoWiki_Controller_Component
             }
         }
         $usage = $dom->createElement('sus:UsageDateRange');
-        $begin = $dom->createElement('sus:Begin',date('Y-m-d'));
-        $end = $dom->createElement('sus:End',date('Y-m-d'));
+        $begin = $dom->createElement('sus:Begin',$startDate);
+        $end = $dom->createElement('sus:End',$endDate);
 
         // Build domtree
         $envelope->appendChild($header);
-        $header->appendChild($body);
+        $envelope->appendChild($body);
         $body->appendChild($reportRequest);
         $reportRequest->appendChild($requestor);
         $reportRequest->appendChild($customer);
@@ -965,34 +1044,73 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $usage->appendChild($begin);
         $usage->appendChild($end);
 
-        return;
-        // debug;
-        //echo $dom->saveXML();
+        $xml = $dom->saveXML();
+
+        $headers = array('Content-Type' => 'text/xml');
+        $response = Requests::post($sushiUrl, $headers, $xml);
+
+        if ($response->success === true) {
+            $this->_prepareXml($response->body);
+        } else {
+            $msg = 'The request went wrong. HTTP response with status:  ';
+            $msg.= $response->status_code;
+            $this->_owApp->appendErrorMessage($msg);
+            $msg = 'You may analyze the returned XML file to adjust your SUSHI settings: ';
+            $msg.= $response->body;
+            $this->_owApp->appendErrorMessage($msg);
+            return;
+        }
     }
 
     private function _setAllSushiData () {
-        $query = 'SELECT DISTINCT ?sushi ?p ?o  WHERE {' . PHP_EOL ;
-        $query.= '?sushi a <' . $this::NS_TERMS . 'SushiSetting> .' . PHP_EOL;
-        $query.= '?sushi ?p ?o .' . PHP_EOL;
+        $query = 'SELECT DISTINCT *  WHERE {' . PHP_EOL ;
+        $query.= '?s a <' . $this::NS_SUSHI . 'SushiSetting> .' . PHP_EOL;
+        $query.= '?s ?p ?o .' . PHP_EOL;
         $query.= '}' . PHP_EOL;
 
         $result = $this->_model->sparqlQuery($query);
         if (count($result) > 0) {
             $this->_sushiSettings = $result;
         }
+        return;
+    }
 
+    private function _setSushiJSONData () {
+        $query = 'SELECT DISTINCT *  WHERE {' . PHP_EOL ;
+        $query.= '?s a <' . $this::NS_SUSHI . 'SushiSetting> .' . PHP_EOL;
+        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiCustomerID> ' . '?customerID .' . PHP_EOL;
+        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiRequestorID> ' . '?requestorID .' . PHP_EOL;
+        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiRequestorMail> ' . '?requestorMail .' . PHP_EOL;
+        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiRequestorName> ' . '?requestorName .' . PHP_EOL;
+        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiUrl> ' . '?url .' . PHP_EOL;
+        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiReportName> ' . '?reportName .' . PHP_EOL;
+        $query.= '?s <' . EF_RDFS_LABEL   . '> ' . '?label .' . PHP_EOL;
+        $query.= '}' . PHP_EOL;
+
+        $result = $this->_model->sparqlQuery($query);
+
+        $this->_sushiJSONData = json_encode($result);
     }
 
     private function _getSushiParams($resourceUri) {
 
-        if ($this->_sushiSettings !== null && isset($this->_sushiSettings[$resourceUri])) {
-            foreach ($this->_sushiSettings as $result) {
-                if (isset($result[$resourceUri])) {
-                    return $result[$resourceUri];
+        if ($this->_sushiSettings === null ) {
+            $this->_setAllSushiData();
+        }
+
+        $temp = array();
+        foreach ($this->_sushiSettings as $result) {
+            if ($result['s'] === $resourceUri) {
+                switch ($result['p']) {
+                    case $this::NS_SUSHI . 'hasSushiReportName':
+                        $temp[$result['p']][] = $result['o'];
+                        break;
+                    default:
+                        $temp[$result['p']] = $result['o'];
                 }
             }
         }
-        return false;
+
+        return $temp;
     }
 }
-

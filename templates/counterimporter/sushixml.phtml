@@ -1,0 +1,13 @@
+<?php
+/**
+ * OntoWiki rdf upload import import template
+ */
+$translate = OntoWiki::getInstance()->translate;
+?>
+<fieldset class="activeForm" id="importdata">
+    <legend><?php echo $this->_($translate->translate('Chose your SUSHI vendor')) ?></legend>
+    <div class="width-auto">
+        <label class="display-block onlyAural" for="sushi-input"></label>
+        <input id="sushi-input" class="text inner-label typeahead" type="text" value="" name="sushi-input"></input>
+    </div>
+</fieldset>
