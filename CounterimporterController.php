@@ -18,6 +18,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
 {
     private $_model                = null;
     private $_post                 = null;
+    private $_organizationUri      = null;
     private $_organizations        = null;
     private $_organizationJSONData = null;
     private $_sushiSettings        = null;
@@ -111,7 +112,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
     }
 
     /**
-     * This action will return a json_encoded array cotaining SUSHI lookup data for JS
+     * This action will return a json_encoded array containing SUSHI lookup data for JS
      */
     public function getsushiAction()
     {
@@ -155,6 +156,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
         if ($this->_request->isPost()) {
             $post = $this->_request->getPost();
+            $this->_organizationUri = $post['organization-input'];
             $upload = new Zend_File_Transfer();
             $filesArray = $upload->getFileInfo();
 
@@ -642,11 +644,13 @@ class CounterimporterController extends OntoWiki_Controller_Component
             return;
         }
 
-        $query = 'SELECT DISTINCT *  WHERE {' . PHP_EOL ;
+        $query = 'SELECT *  WHERE {' . PHP_EOL ;
         $query.= '  ?org a <' . $this::NS_FOAF . 'Organization> .' . PHP_EOL;
+        $query.= '  ?s <' . $this::NS_AMSL . 'licensor>  ?org .' . PHP_EOL;
         $query.= '  OPTIONAL {?org <' . $this::NS_VCARD . 'organization-name> ?name .}' . PHP_EOL;
         $query.= '  OPTIONAL {?org <' . EF_RDFS_LABEL . '> ?label .}' . PHP_EOL;
         $query.= '  OPTIONAL {?org <' . $this::NS_COUNTR . 'hasOrganizationName> ?cntrName .}' . PHP_EOL;
+        $query.= '  OPTIONAL {?contract <' . $this::NS_AMSL . 'licensor> ?org .}' . PHP_EOL;
         $query.= '}' . PHP_EOL;
 
         $result = $this->_model->sparqlQuery($query);
@@ -685,7 +689,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
                     foreach ($labels as $label) {
                         $temp[] = array(
                             'org' => $key,
-                            'label' => $label
+                            'name' => $label
                         );
                     }
                 }
@@ -988,6 +992,16 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $cstmrID = $sushiData[$this::NS_SUSHI . 'hasSushiCustomerID'];
         $rprtName = $sushiData[$this::NS_SUSHI . 'hasSushiReportName'][0];
         $rprtRelease = $sushiData[$this::NS_SUSHI . 'hasSushiReportRelease'];
+        if (!(isset($sushiData[$this::NS_TERMS . 'hasAmslLicensor']))) {
+            $msg = 'No organization found that corresponds to this SUSHI data';
+            $this->_owApp->appendErrorMessage($msg);
+            $msg = 'Please check if the resource ' . $sushiUrl;
+            $msg.= ' has statement "terms:hasAmslLicensor".';
+            $this->_owApp->appendInfoMessage($msg);
+            return;
+        } else {
+            $this->_organizationUri = $sushiData[$this::NS_TERMS . 'hasAmslLicensor'];
+        }
         if (isset($sushiData[$this::NS_SUSHI . 'lastSuccessfullRequest'])) {
             // TODO
         }

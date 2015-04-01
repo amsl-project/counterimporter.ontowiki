@@ -6,16 +6,21 @@ $translate = OntoWiki::getInstance()->translate;
 ?>
 <fieldset class="activeForm" id="importdata">
     <legend><?php echo $this->_($translate->translate('Chose your SUSHI vendor')) ?></legend>
-    <div>
-        <label class="display-block onlyAural" for="sushi-input"></label>
-        <input id="sushi-input" class="text inner-label typeahead" type="text" value="" name="sushi-input"/>
-    </div>
-    <div>
-        <label class="text" for="datepicker1">from</label>
-        <input id="datepicker1" class="ui-datepicker text" type="date" value="" name="from" />
-    </div>
-    <div>
-        <label class="text" for="datepicker2">To</label>
-        <input id="datepicker2" class="ui-datepicker text" type="date" value="" name="to" />
+    <div class="width69 float margin">
+        <div>
+            <p class="messagebox info"><?php echo $translate->translate('Please select the SUSHI data you want to use for COUNTER import.') ?></p>
+        </div>
+        <div class="width69 float margin">
+            <input id="sushi-input" class="typeahead" type="text" value="" name="sushi-input"/>
+        </div>
+        <p class="messagebox info"><?php echo $translate->translate('Please specify the date range.') ?></p>
+        <div>
+            <label class="text" for="datepicker1">Start date</label>
+            <input id="datepicker1" class="ui-datepicker text" type="date" value="" name="from" />
+        </div>
+        <div>
+            <label class="text" for="datepicker2">End date</label>
+            <input id="datepicker2" class="ui-datepicker text" type="date" value="" name="to" />
+        </div>
     </div>
 </fieldset>

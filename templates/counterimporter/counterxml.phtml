@@ -22,10 +22,13 @@ $translate = OntoWiki::getInstance()->translate;
             <input type="file" id="file-input" name="source" />
             <br class="clearall"/>
         </div>
+        <div>
+            <p class="messagebox info">
+                <?php echo $this->_($translate->translate('Please select the organization that is the licensor of the statistical data that will be retrieved.'))?>
+            </p>
+        </div>
+        <div class="width69">
+            <input  id="organization-input" class="typeahead width67" type="text" value="" name="organization-input"/>
+        </div>
     </div>
-    <!--
-    <div class="width-auto">
-        <label class="display-block onlyAural" for="vendor-input"></label>
-        <input id="vendor-input" class="text inner-label typeahead" type="text" value="" name="vendor-input"></input>
-    </div> -->
 </fieldset>

@@ -33,7 +33,7 @@ class CounterimporterPlugin extends OntoWiki_Plugin
         $myImportActions = array(
             'counter--titlelist' => array(
                 'controller' => 'counterimporter',
-                'action' => 'counterxml',
+                'action' => 'sushixml',
                 'label' => $translate->translate('Import a counter xml file'),
                 'description' => 'Tries to generate triples out of a counter xml file'
             )
