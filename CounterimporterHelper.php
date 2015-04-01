@@ -40,6 +40,7 @@ class CounterimporterHelper extends OntoWiki_Component_Helper
         $this->view->headScript()->appendFile($this->_config->urlBase . 'extensions/counterimporter/templates/counterimporter/js/typeahead.bundle.js');
         $this->view->headScript()->appendFile($this->_config->urlBase . 'extensions/counterimporter/templates/counterimporter/js/handlebars.js');
         $this->view->headScript()->appendFile($this->_config->urlBase . 'extensions/counterimporter/templates/counterimporter/js/search.js');
+        $this->view->headScript()->appendFile($this->_config->urlBase . 'extensions/themes/silverblue/scripts/libraries/jquery-ui.js');
         $this->view->headLink()->appendStylesheet($this->_config->urlBase . 'extensions/counterimporter/templates/counterimporter/css/counter.css');
         $this->view->headLink()->appendStylesheet($this->_config->urlBase . 'extensions/counterimporter/templates/counterimporter/css/hint.min.css');
     }

@@ -48,4 +48,6 @@ $(document).ready(function() {
             footer: '<div class="empty-message">Maximal 20 results are shown. Press Enter to see all.</div>'
         }
     });
+    $( "#datepicker1" ).datepicker({ dateFormat: 'yy-mm-dd' });
+    $( "#datepicker2" ).datepicker({ dateFormat: 'yy-mm-dd' });
 });

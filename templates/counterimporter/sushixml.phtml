@@ -6,8 +6,16 @@ $translate = OntoWiki::getInstance()->translate;
 ?>
 <fieldset class="activeForm" id="importdata">
     <legend><?php echo $this->_($translate->translate('Chose your SUSHI vendor')) ?></legend>
-    <div class="width-auto">
+    <div>
         <label class="display-block onlyAural" for="sushi-input"></label>
-        <input id="sushi-input" class="text inner-label typeahead" type="text" value="" name="sushi-input"></input>
+        <input id="sushi-input" class="text inner-label typeahead" type="text" value="" name="sushi-input"/>
+    </div>
+    <div>
+        <label class="text" for="datepicker1">from</label>
+        <input id="datepicker1" class="ui-datepicker text" type="date" value="" name="from" />
+    </div>
+    <div>
+        <label class="text" for="datepicker2">To</label>
+        <input id="datepicker2" class="ui-datepicker text" type="date" value="" name="to" />
     </div>
 </fieldset>

@@ -68,30 +68,30 @@ class CounterimporterController extends OntoWiki_Controller_Component
         );
         $this->view->placeholder('main.window.toolbar')->set($toolbar);
 
-
         // setup the navigation
         OntoWiki::getInstance()->getNavigation()->reset();
-        OntoWiki::getInstance()->getNavigation()->register(
-            'xmluploader',
-            array(
-                'controller' => 'counterimporter',
-                'action' => 'counterxml',
-                'name' => 'Upload a COUNTER XML file',
-                'position' => 0,
-                'active' => true
-            )
-        );
-
         OntoWiki::getInstance()->getNavigation()->register(
             'sushipicker',
             array(
                 'controller' => 'counterimporter',
                 'action' => 'sushixml',
                 'name' => 'Import COUNTER data with SUSHI',
+                'position' => 0,
+                'active' => true
+            )
+        );
+
+        OntoWiki::getInstance()->getNavigation()->register(
+            'xmluploader',
+            array(
+                'controller' => 'counterimporter',
+                'action' => 'counterxml',
+                'name' => 'Upload a COUNTER XML file',
                 'position' => 1,
                 'active' => false
             )
         );
+
     }
 
     /**
@@ -379,11 +379,84 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
         // Report Items
         foreach ($customer->ReportItems as $reportItem) {
+            $identifiers = array();
+            foreach ($reportItem->ItemIdentifier as $itemIdentifier) {
+                $itemIdValue = (string)$itemIdentifier->Value;
+                $itemIdType = (string)$itemIdentifier->Type;
+                if (!(empty($itemIdValue))) {
+                    if (!(empty($itemIdType))) {
+                        switch (strtolower($itemIdType)) {
+                            case 'doi':
+                                if (substr($itemIdValue, 0, 3) === '10.') {
+                                    $identifiers['doi'] = 'http://doi.org/' . $itemIdValue;
+                                }
+                                break;
+                            case 'online_issn':
+                                if (preg_match($regISSN, $itemIdValue)) {
+                                    $identifiers['eissn'] = 'urn:ISSN:' . $itemIdValue;
+                                }
+                                break;
+                            case 'print_issn':
+                                if (preg_match($regISSN, $itemIdValue)) {
+                                    $identifiers['pissn'] = 'urn:ISSN:' . $itemIdValue;
+                                }
+                                break;
+                            case 'online_isbn':
+                                if (preg_match($regISBN, $itemIdValue)) {
+                                    $identifiers['eisbn'] = 'urn:ISBN:' . $itemIdValue;
+                                }
+                                break;
+                            case 'print_isbn':
+                                if (preg_match($regISBN, $itemIdValue)) {
+                                    $identifiers['pisbn'] = 'urn:ISBN:' . $itemIdValue;
+                                }
+                                break;
+                            case 'proprietaryID':
+                                if (preg_match($regISBN, $itemIdValue)) {
+                                    $base = $this::NS_BASE . 'ProprietaryID/';
+                                    $identifiers['proprietaryId'] = $base . $itemIdValue;
+                                }
+                                break;
+                        }
+                    }
+                }
+            }
+
+            // assuming that a journal won't have an ISBN as a book won't an ISSN, we build the uri
+            // of the report item with help of their IDs by the following order:
+            // ISSN||ISBN > DOI > name of report element > md5sum (in case no identifiers found)
+            $idForUri = '';
+            if (isset($identifiers['doi'])) {
+                $idForUri = $identifiers['doi'];
+            }
+            if (isset($identifiers['pissn'])) {
+                $idForUri = $identifiers['pissn'];
+            }
+            if (isset($identifiers['eissn'])) {
+                $idForUri = $identifiers['eissn'];
+            }
+            if (isset($identifiers['pisbn'])) {
+                $idForUri = $identifiers['pisbn'];
+            }
+            if (isset($identifiers['eisbn'])) {
+                $idForUri = $identifiers['eisbn'];
+            }
             $itemName = (string)$reportItem->ItemName;
-            if (!(empty($itemName))) {
-                $itemUri = $this::NS_BASE . 'reportitem/' . urlencode($itemName);
-            } else {
-                $itemUri = $this::NS_BASE . 'reportitem/' . md5(rand());
+            if ($idForUri === '') {
+                if (!(empty($itemName))) {
+                    $idForUri = $itemName;
+                } else {
+                    $idForUri = md5(rand());
+                }
+            }
+            $itemUri = $this::NS_BASE . 'reportitem/' . urlencode($idForUri);
+
+            // write statements for report item
+            foreach ($identifiers as $identifier => $value) {
+                $this->_rprtRes[$itemUri][$this::NS_AMSL . $identifier][] = array(
+                    'type' => 'uri',
+                    'value' => $value
+                );
             }
 
             $this->_rprtRes[$itemUri][EF_RDF_TYPE][] = array(
@@ -446,59 +519,6 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 );
             }
 
-            foreach ($reportItem->ItemIdentifier as $itemIdentifier) {
-                $itemIdValue = (string)$itemIdentifier->Value;
-                $itemIdType = (string)$itemIdentifier->Type;
-                if (!(empty($itemIdValue))) {
-                    if (!(empty($itemIdType))) {
-                        $pred = '';
-                        switch (strtolower($itemIdType)) {
-                            case 'doi':
-                                if (substr($itemIdValue, 0, 3) === '10.') {
-                                    $uri = 'http://doi.org/' . $itemIdValue;
-                                    $pred = $this::NS_AMSL . 'doi';
-                                }
-                                break;
-                            case 'online_issn':
-                                if (preg_match($regISSN, $itemIdValue)) {
-                                    $uri = 'urn:ISSN:' . $itemIdValue;
-                                    $pred = $this::NS_AMSL . 'eissn';
-                                }
-                                break;
-                            case 'print_issn':
-                                if (preg_match($regISSN, $itemIdValue)) {
-                                    $uri = 'urn:ISSN:' . $itemIdValue;
-                                    $pred = $this::NS_AMSL . 'pissn';
-                                }
-                                break;
-                            case 'online_isbn':
-                                if (preg_match($regISBN, $itemIdValue)) {
-                                    $uri = 'urn:ISBN:' . $itemIdValue;
-                                    $pred = $this::NS_AMSL . 'eisbn';
-                                }
-                                break;
-                            case 'print_isbn':
-                                if (preg_match($regISBN, $itemIdValue)) {
-                                    $uri = 'urn:ISBN:' . $itemIdValue;
-                                    $pred = $this::NS_AMSL . 'pisbn';
-                                }
-                                break;
-                            case 'proprietaryID':
-                                if (preg_match($regISBN, $itemIdValue)) {
-                                    $uri = $this::NS_BASE . 'ProprietaryID/' . $itemIdValue;
-                                    $pred = $this::NS_AMSL . 'proprietaryId';
-                                }
-                                break;
-                        }
-                        if ($pred !== '') {
-                            $this->_rprtRes[$itemUri][$pred][] = array(
-                                'type' => 'uri',
-                                'value' => $uri
-                            );
-                        }
-                    }
-                }
-            }
 
             $pubYr = (string)$reportItem->ItemPerformance->PubYr;
             $pubYrFrom = (string)$reportItem->ItemPerformance->PubYrFrom;
@@ -972,7 +992,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
             // TODO
         }
         $startDate = '2015-01-01';
-        $endDate = '2015-03-31';
+        $endDate = '2015-01-31';
         $fltr = array();
 
         $dom = new DOMDocument('1.0', 'utf-8');
@@ -1012,8 +1032,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $customerID = $dom->createElement('sus:ID', $cstmrID);
         $report = $dom->createElement('sus:ReportDefinition');
         $report->setAttribute('Name', $rprtName);
-        //$report->setAttribute('Release', $rprtRelease);
-        $report->setAttribute('Release', '7');
+        $report->setAttribute('Release', $rprtRelease);
 
         // Filter
         $filter = $dom->createElement('sus:Filters');
@@ -1046,8 +1065,13 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
         $xml = $dom->saveXML();
 
-        $headers = array('Content-Type' => 'text/xml');
-        $response = Requests::post($sushiUrl, $headers, $xml);
+        /*$options = array(
+            'Content-Type' => 'text/xml',
+            'Connectoin' => 'keep-alive',
+            'proxy' => 'proxy.uni-leipzig.de'
+            'proxyport' => '3128'
+            );
+        $response = Requests::post($sushiUrl, $options, $xml);
 
         if ($response->success === true) {
             $this->_prepareXml($response->body);
@@ -1060,6 +1084,18 @@ class CounterimporterController extends OntoWiki_Controller_Component
             $this->_owApp->appendErrorMessage($msg);
             return;
         }
+        */
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $sushiUrl);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: text/xml'));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $xml);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_PROXY, 'proxy.uni-leipzig.de');
+        curl_setopt($ch, CURLOPT_PROXYPORT, '3128');
+        $ch_result = curl_exec($ch);
+        curl_close($ch);
+        $this->_prepareXml($ch_result);
     }
 
     private function _setAllSushiData () {
@@ -1088,8 +1124,14 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $query.= '}' . PHP_EOL;
 
         $result = $this->_model->sparqlQuery($query);
-
-        $this->_sushiJSONData = json_encode($result);
+        // Delete duplicates -> returns an associative array
+        $temp = $this->_super_unique($result);
+        // Create a new non associative array
+        $json = array();
+        foreach ($temp as $value) {
+            $json[] = $value;
+        }
+        $this->_sushiJSONData = json_encode($json);
     }
 
     private function _getSushiParams($resourceUri) {
