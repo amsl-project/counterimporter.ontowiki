@@ -96,38 +96,6 @@ class CounterimporterController extends OntoWiki_Controller_Component
     }
 
     /**
-     * This action will return a json_encoded array containing organization lookup data for JS
-     */
-    public function getorganizationsAction()
-    {
-        // tells the OntoWiki to not apply the template to this action
-        $this->_helper->viewRenderer->setNoRender();
-        $this->_helper->layout->disableLayout();
-
-        if ($this->_organizationJSONData === null) {
-            $this->_setOrganizationJSONData();
-        }
-
-        $this->_response->setBody($this->_organizationJSONData);
-    }
-
-    /**
-     * This action will return a json_encoded array containing SUSHI lookup data for JS
-     */
-    public function getsushiAction()
-    {
-        // tells the OntoWiki to not apply the template to this action
-        $this->_helper->viewRenderer->setNoRender();
-        $this->_helper->layout->disableLayout();
-
-        if ($this->_sushiJSONData === null) {
-            $this->_setSushiJSONData();
-        }
-
-        $this->_response->setBody($this->_sushiJSONData);
-    }
-
-    /**
      * This action will fetch COUNTER XML with help of SUSHI protocol
      * After fetching the XML
      */
@@ -137,14 +105,30 @@ class CounterimporterController extends OntoWiki_Controller_Component
         if ($this->_request->isPost()) {
             $post = $this->_request->getPost();
             $sushiUri = $post['sushi-input'];
+            if ($this->_isDate($post['from'])) {
+                $start = $post['from'];
+            } else {
+                $msg = 'The given start date is wrong or empty. Please use the calendar widget.';
+                $this->_owApp->appendErrorMessage($msg);
+            }
+
+            if ($this->_isDate($post['to'])) {
+            $end = $post['to'];
+            } else {
+                $msg = 'The given end date is wrong or empty. Please use the calendar widget.';
+                $this->_owApp->appendErrorMessage($msg);
+            }
+
             if (Erfurt_Uri::check($sushiUri)) {
-                $this->_sushiImport($sushiUri);
+                if (isset($start) && isset($end)) {
+                    $this->_sushiImport($sushiUri, $start, $end);
+                }
             } else {
                 $msg = 'The given URI is not valid. Please check if there are typos and try again';
                 $this->_owApp->appendErrorMessage($msg);
-                return;
             }
         }
+        return;
     }
 
     /**
@@ -191,6 +175,38 @@ class CounterimporterController extends OntoWiki_Controller_Component
         } else {
             return;
         }
+    }
+
+    /**
+     * This action will return a json_encoded array containing SUSHI lookup data for JS
+     */
+    public function getsushiAction()
+    {
+        // tells the OntoWiki to not apply the template to this action
+        $this->_helper->viewRenderer->setNoRender();
+        $this->_helper->layout->disableLayout();
+
+        if ($this->_sushiJSONData === null) {
+            $this->_setSushiJSONData();
+        }
+
+        $this->_response->setBody($this->_sushiJSONData);
+    }
+
+    /**
+     * This action will return a json_encoded array containing organization lookup data for JS
+     */
+    public function getorganizationsAction()
+    {
+        // tells the OntoWiki to not apply the template to this action
+        $this->_helper->viewRenderer->setNoRender();
+        $this->_helper->layout->disableLayout();
+
+        if ($this->_organizationJSONData === null) {
+            $this->_setOrganizationJSONData();
+        }
+
+        $this->_response->setBody($this->_organizationJSONData);
     }
 
     /**
@@ -304,7 +320,17 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $regISSN = '/\d{4}\-\d{3}[\dxX]/';
 
         // create report uri
-        $this->_reportUri = $this::NS_BASE . 'report/' . md5(rand());
+        $value = (string)$attributes->ID;                                           // Report Id
+        $pre = $this::NS_BASE . 'report/';
+        if ((string)$attributes->ID !== '') {
+            $this->_reportUri = $pre . urlencode((string)$attributes->ID);
+        } elseif ((string)$attributes->Name !== '') {
+            $this->_reportUri = $pre . urlencode((string)$attributes->Name);
+        } else {
+            $msg = 'No report identifier found in returned SUSHI data';
+            $this->_owApp->appendErrorMessage($msg);
+            return;
+        }
 
         $this->_rprtRes[$this->_reportUri][EF_RDF_TYPE][] = array(
             'type' => 'uri',
@@ -313,27 +339,14 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
         // Check if date is a valid date (string methods used)
         if (strlen($attributes->Created > 9)) {
-            $substring = substr($attributes->Created, 0, 10);
-            $year = substr($substring, 0, 4);
-            $hyphen1 = substr($substring, 4, 1);
-            $month = substr($substring, 5, 2);
-            $hyphen2 = substr($substring, 7, 1);
-            $day = substr($substring, 8, 2);
-            $test = $hyphen1 . $hyphen2;
-            $dateIsNumeric = false;
-            if (is_numeric($year) && is_numeric($month) && is_numeric($day)) {
-                $dateIsNumeric = true;
-            }
-            if ($dateIsNumeric === true) {
-                if (checkdate($month, $day, $year) === true && $test === '--') {
-                    $date = $year . '-' . $month . '-' . $day;
-                    $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'wasCreatedOn'][] =
-                        array(
-                            'type' => 'literal',
-                            'value' => $date,
-                            'datatype' => $this::NS_XSD . 'date'
-                        );
-                }
+            $date = substr($attributes->Created, 0, 10);
+            if ($this->_isDate($date)) {
+                $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'wasCreatedOn'][] =
+                    array(
+                        'type' => 'literal',
+                        'value' => $date,
+                        'datatype' => $this::NS_XSD . 'date'
+                    );
             } else {
                 $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'wasCreatedOn'][] = array(
                     'type' => 'literal',
@@ -773,20 +786,6 @@ class CounterimporterController extends OntoWiki_Controller_Component
         return $value;
     }
 
-    private function _super_unique($array)
-    {
-        $result = array_map("unserialize", array_unique(array_map("serialize", $array)));
-
-        foreach ($result as $key => $value)
-        {
-            if ( is_array($value) )
-            {
-                $result[$key] = $this->_super_unique($value);
-            }
-        }
-        return $result;
-    }
-
     /**
      * @param $organization
      * @param $type
@@ -872,8 +871,6 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 if (!(substr($contactMail, 0, 7) === 'mailto:')) {
                     $contactMail = 'mailto:' . $contactMail;
                 }
-                // TODO Evtl. noch auf URI (Errfurt) überprüfen, allerdings weiß ich nicht,
-                // ob mailto erkannt wird
                 $this->_rprtRes[$organizationUri][$this::NS_VCARD . 'hasEmail'][] = array(
                     'type' => 'uri',
                     'value' => $contactMail
@@ -965,25 +962,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
        return;
     }
 
-    public function onSushiImportAction ($event) {
-        // TODO
-    }
-
-    private function _sushiImport ($resourceUri) {
-        $store  = Erfurt_App::getInstance()->getStore();
-        $config = Erfurt_App::getInstance()->getConfig();
-
-        //$this->_model       = $event->selectedModel;
-        //$resourceUri        = $event->resourceUri;
-
-        //TODO add access control
-        //TODO add post parameter
-
-        // tells the OntoWiki to not apply the template to this action
-        //$this->_helper->viewRenderer->setNoRender();
-        //$this->_helper->layout->disableLayout();
-
-        // TODO Variables must be filled with values found in amsl store or post request
+    private function _sushiImport ($resourceUri, $startDate, $endDate ) {
         $sushiData = $this->_getSushiParams($resourceUri);
         $sushiUrl = $sushiData[$this::NS_SUSHI . 'hasSushiUrl'];
         $rqstrID = $sushiData[$this::NS_SUSHI . 'hasSushiRequestorID'];
@@ -992,21 +971,16 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $cstmrID = $sushiData[$this::NS_SUSHI . 'hasSushiCustomerID'];
         $rprtName = $sushiData[$this::NS_SUSHI . 'hasSushiReportName'][0];
         $rprtRelease = $sushiData[$this::NS_SUSHI . 'hasSushiReportRelease'];
-        if (!(isset($sushiData[$this::NS_TERMS . 'hasAmslLicensor']))) {
+        if (!(isset($sushiData['http://vocab.ub.uni-leipzig.de/terms/hasAmslLicensor']))) {
             $msg = 'No organization found that corresponds to this SUSHI data';
             $this->_owApp->appendErrorMessage($msg);
-            $msg = 'Please check if the resource ' . $sushiUrl;
+            $msg = 'Please check if the resource ' . $resourceUri;
             $msg.= ' has statement "terms:hasAmslLicensor".';
             $this->_owApp->appendInfoMessage($msg);
             return;
         } else {
-            $this->_organizationUri = $sushiData[$this::NS_TERMS . 'hasAmslLicensor'];
+            $this->_organizationUri = $sushiData['http://vocab.ub.uni-leipzig.de/terms/hasAmslLicensor'];
         }
-        if (isset($sushiData[$this::NS_SUSHI . 'lastSuccessfullRequest'])) {
-            // TODO
-        }
-        $startDate = '2015-01-01';
-        $endDate = '2015-01-31';
         $fltr = array();
 
         $dom = new DOMDocument('1.0', 'utf-8');
@@ -1058,58 +1032,73 @@ class CounterimporterController extends OntoWiki_Controller_Component
             }
         }
         $usage = $dom->createElement('sus:UsageDateRange');
-        $begin = $dom->createElement('sus:Begin',$startDate);
-        $end = $dom->createElement('sus:End',$endDate);
 
-        // Build domtree
-        $envelope->appendChild($header);
-        $envelope->appendChild($body);
-        $body->appendChild($reportRequest);
-        $reportRequest->appendChild($requestor);
-        $reportRequest->appendChild($customer);
-        $reportRequest->appendChild($report);
-        $requestor->appendChild($requestorID);
-        $requestor->appendChild($requestorName);
-        $requestor->appendChild($requestorMail);
-        $customer->appendChild($customerID);
-        $report->appendChild($filter);
-        $filter->appendChild($usage);
-        $usage->appendChild($begin);
-        $usage->appendChild($end);
+        // Split requests per month
+        $start = new DateTime($startDate);
+        $end = new DateTime($endDate);
+        $interval = new DateInterval('P1M');
+        $period = new DatePeriod($start,$interval,$end);
 
-        $xml = $dom->saveXML();
+        foreach ($period as $month) {
+            $begin = $dom->createElement('sus:Begin', $month->format('Y-m-01'));
+            $end = $dom->createElement('sus:End', $month->format('Y-m-t'));
 
-        /*$options = array(
-            'Content-Type' => 'text/xml',
-            'Connectoin' => 'keep-alive',
-            'proxy' => 'proxy.uni-leipzig.de'
-            'proxyport' => '3128'
-            );
-        $response = Requests::post($sushiUrl, $options, $xml);
+            // Build domtree
+            $envelope->appendChild($header);
+            $envelope->appendChild($body);
+            $body->appendChild($reportRequest);
+            $reportRequest->appendChild($requestor);
+            $reportRequest->appendChild($customer);
+            $reportRequest->appendChild($report);
+            $requestor->appendChild($requestorID);
+            $requestor->appendChild($requestorName);
+            $requestor->appendChild($requestorMail);
+            $customer->appendChild($customerID);
+            $report->appendChild($filter);
+            $filter->appendChild($usage);
+            while($usage->hasChildNodes()) {
+                $usage->removeChild($usage->firstChild);
+            }
+            $usage->appendChild($begin);
+            $usage->appendChild($end);
 
-        if ($response->success === true) {
-            $this->_prepareXml($response->body);
-        } else {
-            $msg = 'The request went wrong. HTTP response with status:  ';
-            $msg.= $response->status_code;
-            $this->_owApp->appendErrorMessage($msg);
-            $msg = 'You may analyze the returned XML file to adjust your SUSHI settings: ';
-            $msg.= $response->body;
-            $this->_owApp->appendErrorMessage($msg);
-            return;
+            $xml = $dom->saveXML();
+
+            /*$options = array(
+                'Content-Type' => 'text/xml',
+                'Connectoin' => 'keep-alive',
+                'proxy' => 'proxy.uni-leipzig.de'
+                'proxyport' => '3128'
+                );
+            $response = Requests::post($sushiUrl, $options, $xml);
+
+            if ($response->success === true) {
+                $this->_prepareXml($response->body);
+            } else {
+                $msg = 'The request went wrong. HTTP response with status:  ';
+                $msg.= $response->status_code;
+                $this->_owApp->appendErrorMessage($msg);
+                $msg = 'You may analyze the returned XML file to adjust your SUSHI settings: ';
+                $msg.= $response->body;
+                $this->_owApp->appendErrorMessage($msg);
+                return;
+            }
+            */
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $sushiUrl);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: text/xml'));
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $xml);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_PROXY, 'proxy.uni-leipzig.de');
+            curl_setopt($ch, CURLOPT_PROXYPORT, '3128');
+            $ch_result[] = curl_exec($ch);
+            curl_close($ch);
         }
-        */
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $sushiUrl);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: text/xml'));
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $xml);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_PROXY, 'proxy.uni-leipzig.de');
-        curl_setopt($ch, CURLOPT_PROXYPORT, '3128');
-        $ch_result = curl_exec($ch);
-        curl_close($ch);
-        $this->_prepareXml($ch_result);
+
+        foreach ($ch_result as $response) {
+            $this->_prepareXml($response);
+        }
     }
 
     private function _setAllSushiData () {
@@ -1168,5 +1157,40 @@ class CounterimporterController extends OntoWiki_Controller_Component
         }
 
         return $temp;
+    }
+
+    private function _isDate ($date) {
+        if (strlen($date) >= 10) {
+            $year = substr($date, 0, 4);
+            $hyphen1 = substr($date, 4, 1);
+            $month = substr($date, 5, 2);
+            $hyphen2 = substr($date, 7, 1);
+            $day = substr($date, 8, 2);
+            $test = $hyphen1 . $hyphen2;
+            $dateIsNumeric = false;
+            if (is_numeric($year) && is_numeric($month) && is_numeric($day)) {
+                $dateIsNumeric = true;
+            }
+            if ($dateIsNumeric === true) {
+                if (checkdate($month, $day, $year) === true && $test === '--') {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private function _super_unique($array)
+    {
+        $result = array_map("unserialize", array_unique(array_map("serialize", $array)));
+
+        foreach ($result as $key => $value)
+        {
+            if ( is_array($value) )
+            {
+                $result[$key] = $this->_super_unique($value);
+            }
+        }
+        return $result;
     }
 }
