@@ -121,7 +121,12 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
             if (Erfurt_Uri::check($sushiUri)) {
                 if (isset($start) && isset($end)) {
-                    $this->_sushiImport($sushiUri, $start, $end);
+                    if (new DateTime($start) < new DateTime($end)) {
+                        $this->_sushiImport($sushiUri, $start, $end);
+                    } else {
+                        $msg = 'The end date lies before the start date';
+                        $this->_owApp->appendErrorMessage($msg);
+                    }
                 }
             } else {
                 $msg = 'The given URI is not valid. Please check if there are typos and try again';
