@@ -222,24 +222,30 @@ class CounterimporterController extends OntoWiki_Controller_Component
         // READING XML file
         $xmlstr = str_replace('xmlns=', 'ns=', $xmlstr);
         $xml = new SimpleXMLElement($xmlstr);
+        $ns = $xml->getDocNamespaces(true);
+        $ns2 = $xml->getNamespaces(true);
+        foreach($xml->children() as $node) {
+            echo '';
+        }
         $counterUrl = 'http://www.niso.org/schemas/counter';
+        $sushiUrl = 'http://www.niso.org/schemas/sushi/counter';
         $ns = $xml->getDocNamespaces(true);
         if (count($ns) != 0) {
-            /* if (isset($ns['xmlns']) && $ns['xmlns'] === $counterUrl) {
-                $implicit = true;
-            }*/
-
-            /*
             if (in_array($counterUrl, $ns)) {
                 $flippedNs = array_flip($ns);
                 $counterNS = $flippedNs[$counterUrl];
                 $xml->registerXPathNamespace($counterNS, $counterUrl);
             }
-            */
+            if (in_array($sushiUrl, $ns)) {
+                $flippedNs = array_flip($ns);
+                $sushiNS = $flippedNs[$sushiUrl];
+                $xml->registerXPathNamespace($sushiNS, $sushiUrl);
+            }
+
         }
 
         $error = $xml->xpath('//Message');
-        if (count($error > 0)) {
+        if (count($error) > 0) {
             $out = 'The returned XML contains information that may help you: ' ;
             foreach ($error as $key => $message) {
                 $out .= '"' . (string)$message . '"' . PHP_EOL;
@@ -250,12 +256,41 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
         // Try to find a report node in counter namespace
         $reports = $xml->children($counterUrl);
-        if (count($reports) !== 0 ) {
+        if (count($reports) !== 0) {
             if (isset($reports->Report)) {
                 $reportsFound = true;
                 foreach ($reports->Report as $report) {
                     $attributes = $report->attributes();
                     $this->_writeReport($report, $attributes);
+                }
+            }
+        }
+
+        if ($reportsFound === false) {
+            $reports = $xml->children();
+            if (count($reports) !== 0) {
+                if (isset($reports->Report)) {
+                    $reportsFound = true;
+                    foreach ($reports->Report as $report) {
+                        $attributes = $report->attributes();
+                        $this->_writeReport($report, $attributes);
+                    }
+                }
+            }
+        }
+
+        // If no success try to find reports with XPATH using namespaces used in xml
+        if ($reportsFound === false && isset($counterNS)) {
+            $reports = $xml->xpath('//' . $counterNS . ':Report');
+            if (!(count($reports) === 0 || $reports === null)) {
+                foreach ($reports as $report) {
+                    $reportsFound = true;
+                    // we are a Report node
+                    if ($report->attributes() !== null) {
+                        $attributes = $report->attributes();
+                        $report = $report->children($counterUrl);
+                        $dataWritten = $this->_writeReport($report, $attributes);
+                    }
                 }
             }
         }
@@ -270,6 +305,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
                         // we are a Report node
                         if ($report->attributes() !== null) {
                             $attributes = $report->attributes();
+                            $report = $report->children();
                             $dataWritten = $this->_writeReport($report, $attributes);
                         }
                     }
@@ -325,16 +361,17 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $regISSN = '/\d{4}\-\d{3}[\dxX]/';
 
         // create report uri
-        $value = (string)$attributes->ID;                                           // Report Id
+        $id = (string)$attributes->ID;                                           // Report Id
+        $name = (string)$attributes->Name;
         $pre = $this::NS_BASE . 'report/';
-        if ((string)$attributes->ID !== '') {
-            $this->_reportUri = $pre . urlencode((string)$attributes->ID);
-        } elseif ((string)$attributes->Name !== '') {
-            $this->_reportUri = $pre . urlencode((string)$attributes->Name);
+        if ($id !== '') {
+            $this->_reportUri = $pre . urlencode($id);
+        } elseif ($name !== '') {
+            $this->_reportUri = $pre . urlencode($name);
         } else {
             $msg = 'No report identifier found in returned SUSHI data';
             $this->_owApp->appendErrorMessage($msg);
-            return;
+            return false;
         }
 
         $this->_rprtRes[$this->_reportUri][EF_RDF_TYPE][] = array(
@@ -431,11 +468,9 @@ class CounterimporterController extends OntoWiki_Controller_Component
                                     $identifiers['pisbn'] = 'urn:ISBN:' . $itemIdValue;
                                 }
                                 break;
-                            case 'proprietaryID':
-                                if (preg_match($regISBN, $itemIdValue)) {
+                            case 'proprietary':
                                     $base = $this::NS_BASE . 'ProprietaryID/';
                                     $identifiers['proprietaryId'] = $base . $itemIdValue;
-                                }
                                 break;
                         }
                     }
@@ -472,11 +507,14 @@ class CounterimporterController extends OntoWiki_Controller_Component
             $itemUri = $this::NS_BASE . 'reportitem/' . urlencode($idForUri);
 
             // write statements for report item
-            foreach ($identifiers as $identifier => $value) {
-                $this->_rprtRes[$itemUri][$this::NS_AMSL . $identifier][] = array(
-                    'type' => 'uri',
-                    'value' => $value
-                );
+            if (isset($identifiers)) {
+                foreach ($identifiers as $identifier => $value) {
+                    //echo 'Identifier: '. $identifier . ' value: ' . $value . '</br>';
+                    $this->_rprtRes[$itemUri][$this::NS_AMSL . $identifier][] = array(
+                        'type' => 'uri',
+                        'value' => urlencode($value)
+                    );
+                }
             }
 
             $this->_rprtRes[$itemUri][EF_RDF_TYPE][] = array(
@@ -1095,6 +1133,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
             curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: text/xml'));
             curl_setopt($ch, CURLOPT_POSTFIELDS, $xml);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            //curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
             curl_setopt($ch, CURLOPT_PROXY, 'proxy.uni-leipzig.de');
             curl_setopt($ch, CURLOPT_PROXYPORT, '3128');
             $ch_result[] = curl_exec($ch);
