@@ -17,7 +17,7 @@
 class CounterimporterController extends OntoWiki_Controller_Component
 {
     private $_model                = null;
-    private $_post                 = null;
+    private $_translate            = null;
     private $_organizationUri      = null;
     private $_organizations        = null;
     private $_organizationJSONData = null;
@@ -55,17 +55,18 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $this->view->formName         = 'importdata';
         $this->view->supportedFormats = $this->_erfurt->getStore()->getSupportedImportFormats();
 
-        $this->_owApp = OntoWiki::getInstance();
-        $this->_model = $this->_owApp->selectedModel;
+        $this->_owApp     = OntoWiki::getInstance();
+        $this->_model     = $this->_owApp->selectedModel;
+        $this->_translate = $this->_owApp->translate;
 
         // add a standard toolbar
         $toolbar = $this->_owApp->toolbar;
         $toolbar->appendButton(
             OntoWiki_Toolbar::SUBMIT,
-            array('name' => 'Import Data', 'id' => 'importdata')
+            array('name' => $this->_translate->translate('Import Data'), 'id' => 'importdata')
         )->appendButton(
             OntoWiki_Toolbar::RESET,
-            array('name' => 'Cancel', 'id' => 'importdata')
+            array('name' => $this->_translate->translate('Cancel'), 'id' => 'importdata')
         );
         $this->view->placeholder('main.window.toolbar')->set($toolbar);
 
@@ -76,7 +77,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
             array(
                 'controller' => 'counterimporter',
                 'action' => 'sushixml',
-                'name' => 'Import COUNTER data with SUSHI',
+                'name' => $this->_translate->translate('Import COUNTER data with SUSHI'),
                 'position' => 0,
                 'active' => true
             )
@@ -87,7 +88,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
             array(
                 'controller' => 'counterimporter',
                 'action' => 'counterxml',
-                'name' => 'Upload a COUNTER XML file',
+                'name' => $this->_translate->translate('Upload a COUNTER XML file'),
                 'position' => 1,
                 'active' => false
             )
@@ -108,14 +109,18 @@ class CounterimporterController extends OntoWiki_Controller_Component
             if ($this->_isDate($post['from'])) {
                 $start = $post['from'];
             } else {
-                $msg = 'The given start date is wrong or empty. Please use the calendar widget.';
+                $msg = $this->_translate->translate(
+                    'The given start date is empty or wrong. Please use the calendar widget.'
+                );
                 $this->_owApp->appendErrorMessage($msg);
             }
 
             if ($this->_isDate($post['to'])) {
             $end = $post['to'];
             } else {
-                $msg = 'The given end date is wrong or empty. Please use the calendar widget.';
+                $msg = $this->_translate->translate(
+                    'The given end date is empty or wrong. Please use the calendar widget.'
+                );
                 $this->_owApp->appendErrorMessage($msg);
             }
 
@@ -124,12 +129,16 @@ class CounterimporterController extends OntoWiki_Controller_Component
                     if (new DateTime($start) < new DateTime($end)) {
                         $this->_sushiImport($sushiUri, $start, $end);
                     } else {
-                        $msg = 'The end date lies before the start date';
+                        $msg = $this->_translate->translate(
+                            'The end date lies before the start date.'
+                        );
                         $this->_owApp->appendErrorMessage($msg);
                     }
                 }
             } else {
-                $msg = 'The given URI is not valid. Please check if there are typos and try again';
+                $msg = $this->_translate->translate(
+                    'The given URI is not valid. Please check if there are typos and try again.'
+                );
                 $this->_owApp->appendErrorMessage($msg);
             }
         }
@@ -152,16 +161,24 @@ class CounterimporterController extends OntoWiki_Controller_Component
             $message = '';
             switch (true) {
                 case empty($filesArray):
-                    $message = 'upload went wrong. check post_max_size in your php.ini.';
+                    $message = $this->_translate->translate(
+                        'The upload went wrong. check post_max_size in your php.ini or ask your IT.'
+                    );
                     break;
                 case ($filesArray['source']['error'] == UPLOAD_ERR_INI_SIZE):
-                    $message = 'The uploaded files\'s size exceeds the upload_max_filesize directive in php.ini.';
+                    $message = $message = $this->_translate->translate(
+                        'The uploaded files\'s size exceeds the upload_max_filesize directive in php.ini.'
+                    );
                     break;
                 case ($filesArray['source']['error'] == UPLOAD_ERR_PARTIAL):
-                    $message = 'The file was only partially uploaded.';
+                    $message = $message = $this->_translate->translate(
+                        'The file was only partially uploaded.')
+                    ;
                     break;
                 case ($filesArray['source']['error'] >= UPLOAD_ERR_NO_FILE):
-                    $message = 'Please select a file to upload';
+                    $message = $message = $this->_translate->translate(
+                        'Please select a file to upload.'
+                    );
                     break;
             }
 
@@ -316,7 +333,9 @@ class CounterimporterController extends OntoWiki_Controller_Component
         // If we reach this point, no COUNTER reports were found in XML
         // We throw a message and exit
         if ($reportsFound === false) {
-            $this->_owApp->appendErrorMessage('Nothing imported. No report data found');
+            $this->_owApp->appendErrorMessage($message = $this->_translate->translate(
+                'Nothing imported. No report data found.'
+            ));
             if (isset($out)) {
                 $this->_owApp->appendErrorMessage($out);
             }
@@ -347,11 +366,14 @@ class CounterimporterController extends OntoWiki_Controller_Component
             $indexEvent->trigger();
         } catch (Exception $e) {
             $message = $e->getMessage();
-            $this->_owApp->appendErrorMessage('Could not import counter xml: ' . $message);
+            $this->_owApp->appendErrorMessage($message = $this->_translate->translate(
+                'Could not import counter xml: ') . $message);
             return;
         }
 
-        $this->_owApp->appendSuccessMessage('Data successfully imported.');
+        $this->_owApp->appendSuccessMessage($message = $this->_translate->translate(
+            'Data successfully imported.'
+        ));
     }
 
     private function _writeReport($report, $attributes)
@@ -369,7 +391,9 @@ class CounterimporterController extends OntoWiki_Controller_Component
         } elseif ($name !== '') {
             $this->_reportUri = $pre . urlencode($name);
         } else {
-            $msg = 'No report identifier found in returned SUSHI data';
+            $msg = $message = $this->_translate->translate(
+                'Import aborted. No report identifier found in COUNTER data.'
+            );
             $this->_owApp->appendErrorMessage($msg);
             return false;
         }
@@ -1015,10 +1039,13 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $rprtName = $sushiData[$this::NS_SUSHI . 'hasSushiReportName'][0];
         $rprtRelease = $sushiData[$this::NS_SUSHI . 'hasSushiReportRelease'];
         if (!(isset($sushiData['http://vocab.ub.uni-leipzig.de/terms/hasAmslLicensor']))) {
-            $msg = 'No organization found that corresponds to this SUSHI data';
+            $msg = $message = $this->_translate->translate(
+                'No organization found that corresponds to this SUSHI data.'
+            );
             $this->_owApp->appendErrorMessage($msg);
-            $msg = 'Please check if the resource ' . $resourceUri;
-            $msg.= ' has statement "terms:hasAmslLicensor".';
+            $msg = $message = $this->_translate->translate(
+                "Please check if the resource $resourceUri has a statement terms:hasAmslLicensor."
+            );
             $this->_owApp->appendInfoMessage($msg);
             return;
         } else {
