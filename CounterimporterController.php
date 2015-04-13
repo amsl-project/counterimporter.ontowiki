@@ -469,32 +469,32 @@ class CounterimporterController extends OntoWiki_Controller_Component
                         switch (strtolower($itemIdType)) {
                             case 'doi':
                                 if (substr($itemIdValue, 0, 3) === '10.') {
-                                    $identifiers['doi'] = 'http://doi.org/' . $itemIdValue;
+                                    $identifiers['doi'] = 'http://doi.org/' . urlencode($itemIdValue);
                                 }
                                 break;
                             case 'online_issn':
-                                if (preg_match($regISSN, $itemIdValue)) {
-                                    $identifiers['eissn'] = 'urn:ISSN:' . $itemIdValue;
+                                if (preg_match($regISSN, $itemIdValue, $match) === 1) {
+                                    $identifiers['eissn'] = 'urn:ISSN:' . $match[0];
                                 }
                                 break;
                             case 'print_issn':
-                                if (preg_match($regISSN, $itemIdValue)) {
-                                    $identifiers['pissn'] = 'urn:ISSN:' . $itemIdValue;
+                                if (preg_match($regISSN, $itemIdValue, $match) === 1) {
+                                    $identifiers['pissn'] = 'urn:ISSN:' . $match[0];
                                 }
                                 break;
                             case 'online_isbn':
-                                if (preg_match($regISBN, $itemIdValue)) {
-                                    $identifiers['eisbn'] = 'urn:ISBN:' . $itemIdValue;
+                                if (preg_match($regISBN, $itemIdValue, $match) === 1) {
+                                    $identifiers['eisbn'] = 'urn:ISBN:' . $match[0];
                                 }
                                 break;
                             case 'print_isbn':
-                                if (preg_match($regISBN, $itemIdValue)) {
-                                    $identifiers['pisbn'] = 'urn:ISBN:' . $itemIdValue;
+                                if (preg_match($regISBN, $itemIdValue, $match) === 1) {
+                                    $identifiers['pisbn'] = 'urn:ISBN:' . $match[0];
                                 }
                                 break;
                             case 'proprietary':
                                     $base = $this::NS_BASE . 'ProprietaryID/';
-                                    $identifiers['proprietaryId'] = $base . $itemIdValue;
+                                    $identifiers['proprietaryId'] = $base . urlencode($itemIdValue);
                                 break;
                         }
                     }
@@ -536,7 +536,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
                     //echo 'Identifier: '. $identifier . ' value: ' . $value . '</br>';
                     $this->_rprtRes[$itemUri][$this::NS_AMSL . $identifier][] = array(
                         'type' => 'uri',
-                        'value' => urlencode($value)
+                        'value' => $value
                     );
                 }
             }
