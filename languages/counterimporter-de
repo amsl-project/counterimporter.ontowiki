@@ -1,5 +1,6 @@
 Import Data;Importieren
 Cancel;Abbrechen
+Import counter usage statistics;Counter-Nutzungsdaten importieren
 Import COUNTER data with SUSHI;COUNTER-Daten über SUSHI importieren
 Upload a COUNTER XML file;Eine COUNTER-XML-Datei hochladen
 The given start date is empty or wrong. Please use the calendar widget.;Das eingegebene Startdatum ist leer oder falsch. Bitte benutzen Sie das Datumswidget.

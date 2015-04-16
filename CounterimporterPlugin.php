@@ -34,7 +34,7 @@ class CounterimporterPlugin extends OntoWiki_Plugin
             'counter--titlelist' => array(
                 'controller' => 'counterimporter',
                 'action' => 'sushixml',
-                'label' => $translate->translate('Import a counter xml file'),
+                'label' => $translate->translate('Import counter usage statistics'),
                 'description' => 'Tries to generate triples out of a counter xml file'
             )
         );
