@@ -22,6 +22,6 @@ Please select a UTF-8 encoded COUNTER XML File to import. (Note: Only COUNTER Ve
 Please select the organization that is the licensor of the statistical data that will be retrieved.;Bitte wählen Sie die Organization aus, die der Lizenzgeber der von diesen COUNTER-Daten abgedeckten Titel ist.
 Chose your SUSHI vendor;Wählen Sie einen SUSHI-Anbieter
 Please select the SUSHI data you want to use for COUNTER import.;Bitte wählen Sie einen SUSHI-Anbieter.
-Please specify the date range.;Bitte wählen Sie die geüwünschte Zeitspanne.
+Please specify the date range.;Bitte wählen Sie die gewünschte Zeitspanne.
 Start date;Startdatum
 End date;Enddatum

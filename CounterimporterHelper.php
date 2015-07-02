@@ -8,7 +8,7 @@
  */
 
 /**
- * Helper class for the Fulltextsearch component.
+ * Helper class for the counterimporter form.
  *
  * @category OntoWiki
  * @package Extensions_Counter

@@ -23,6 +23,9 @@
     outline: none;
     padding-bottom: -50px;
 }
+.sushi-vendor {
+   margin-left: 27%;
+}
 .typeahead {
     background-color: #fff;
 }
@@ -38,8 +41,8 @@
     font-weight: bold;
 }
 .tt-dropdown-menu {
-    width: 100%;
-    margin-top: 12px;
+    width: 90%;
+    margin-top: 31px;
     padding: 8px 0;
     margin-bottom: 50px;
     background-color: #F5F5F5;
@@ -53,8 +56,8 @@
 }
 .tt-suggestion {
     padding: 3px 20px;
-    font-size: 18px;
-    line-height: 24px;
+    font-size: 14px;
+    line-height: 16px;
 }
 .highlight-title {
     /*color: #08d;*/

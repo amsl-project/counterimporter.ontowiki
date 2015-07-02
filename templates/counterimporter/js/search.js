@@ -45,15 +45,14 @@ $(document).ready(function() {
     sourceSushi += '<span class="highlight-title">{{label}}</span><br><!--<span class="origin-index">Report-Typ: {{reportName}}</span><--><br>';
     sourceSushi += '</p>';
     var noResults = 'No results found';
-    var trigger = 'Press enter to trigger an advanced search';
     $('#sushi-input.typeahead').typeahead(null, {
         name: 'sushi-matches',
         displayKey: 's',
         source: sushi.ttAdapter(),
         templates: {
-            empty: ['<div class="empty-message">', '<strong>' + noResults + '</strong><p>' + trigger + '</p?>', '</div>'].join('\n'),
+            empty: ['<div class="empty-message">', '<strong>' + noResults + '</strong>', '</div>'].join('\n'),
             suggestion: Handlebars.compile(sourceSushi),
-            footer: '<div class="empty-message">A maximum of ' + i + ' results are shown. Press Enter to see all.</div>'
+            footer: '<div class="empty-message">A maximum of ' + i + ' results are shown.</div>'
         }
     });
     organization.clearPrefetchCache();
@@ -65,9 +64,9 @@ $(document).ready(function() {
         displayKey: 'org',
         source: organization.ttAdapter(),
         templates: {
-            empty: ['<div class="empty-message">', '<strong>' + noResults + '</strong><p>' + trigger + '</p?>', '</div>'].join('\n'),
+            empty: ['<div class="empty-message">', '<strong>' + noResults + '</strong>', '</div>'].join('\n'),
             suggestion: Handlebars.compile(sourceOrganization),
-            footer: '<div class="empty-message">A Maximum of ' + i + ' results are shown. Press Enter to see all.</div>'
+            footer: '<div class="empty-message">A Maximum of ' + i + ' results are shown.</div>'
         }
     });
     $( "#datepicker1" ).datepicker({ dateFormat: 'yy-mm-dd' });
