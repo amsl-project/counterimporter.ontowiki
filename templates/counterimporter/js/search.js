@@ -17,7 +17,7 @@ sushi = new Bloodhound({
     queryTokenizer: Bloodhound.tokenizers.whitespace,
     limit: i,
     prefetch: {
-        url: urlBase + 'counterimporter/getsushi'
+        url: urlBase + 'counterimporter/getsushivendors'
     }
 });
 sushi.initialize();

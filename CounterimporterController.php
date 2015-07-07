@@ -72,6 +72,8 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
         // setup the navigation
         OntoWiki::getInstance()->getNavigation()->reset();
+
+        // Download via sushi protocol
         OntoWiki::getInstance()->getNavigation()->register(
             'sushipicker',
             array(
@@ -83,6 +85,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
             )
         );
 
+        // Upload a counter xml file
         OntoWiki::getInstance()->getNavigation()->register(
             'xmluploader',
             array(
@@ -202,7 +205,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
     /**
      * This action will return a json_encoded array containing SUSHI lookup data for JS
      */
-    public function getsushiAction()
+    public function getsushivendorsAction()
     {
         // tells the OntoWiki to not apply the template to this action
         $this->_helper->viewRenderer->setNoRender();
@@ -386,6 +389,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $id = (string)$attributes->ID;                                           // Report Id
         $name = (string)$attributes->Name;
         $pre = $this::NS_BASE . 'report/';
+
         if ($id !== '') {
             $this->_reportUri = $pre . urlencode($id);
         } elseif ($name !== '') {
@@ -1047,6 +1051,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $cstmrID = $sushiData[$this::NS_SUSHI . 'hasSushiCustomerID'];
         $rprtName = $sushiData[$this::NS_SUSHI . 'hasSushiReportName'][0];
         $rprtRelease = $sushiData[$this::NS_SUSHI . 'hasSushiReportRelease'];
+
         if (!(isset($sushiData['http://vocab.ub.uni-leipzig.de/terms/hasAmslLicensor']))) {
             $msg = $message = $this->_translate->translate(
                 'No organization found that corresponds to this SUSHI data.'
@@ -1060,6 +1065,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
         } else {
             $this->_organizationUri = $sushiData['http://vocab.ub.uni-leipzig.de/terms/hasAmslLicensor'];
         }
+
         $fltr = array();
 
         $dom = new DOMDocument('1.0', 'utf-8');
@@ -1103,6 +1109,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
         // Filter
         $filter = $dom->createElement('sus:Filters');
+
         if (count($fltr) > 0) {
             foreach ($fltr as $key => $filterType) {
                 $i = $dom->createElement('sus:Filter');
@@ -1110,15 +1117,21 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 $filter->appendChild($i);
             }
         }
+
         $usage = $dom->createElement('sus:UsageDateRange');
 
-        // Split requests per month
-        $start = new DateTime($startDate);
-        $end = new DateTime($endDate);
+        // Split requests per month and skip current month
+        $today    = new DateTime();
+        $start    = new DateTime($startDate);
+        $end      = new DateTime($endDate);
         $interval = new DateInterval('P1M');
-        $period = new DatePeriod($start,$interval,$end);
+        $period   = new DatePeriod($start,$interval,$end);
 
         foreach ($period as $month) {
+            if ($month->format('Ym') === $today->format('Ym')) {
+                continue;
+            }
+
             $begin = $dom->createElement('sus:Begin', $month->format('Y-m-01'));
             $end = $dom->createElement('sus:End', $month->format('Y-m-t'));
 
@@ -1188,32 +1201,32 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $query.= '}' . PHP_EOL;
 
         $result = $this->_model->sparqlQuery($query);
+
         if (count($result) > 0) {
             $this->_sushiSettings = $result;
         }
+
         return;
     }
 
     private function _setSushiJSONData () {
         $query = 'SELECT DISTINCT *  WHERE {' . PHP_EOL ;
         $query.= '?s a <' . $this::NS_SUSHI . 'SushiSetting> .' . PHP_EOL;
-        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiCustomerID> ' . '?customerID .' . PHP_EOL;
-        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiRequestorID> ' . '?requestorID .' . PHP_EOL;
-        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiRequestorMail> ' . '?requestorMail .' . PHP_EOL;
-        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiRequestorName> ' . '?requestorName .' . PHP_EOL;
-        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiUrl> ' . '?url .' . PHP_EOL;
-        //$query.= '?s <' . $this::NS_SUSHI . 'hasSushiReportName> ' . '?reportName .' . PHP_EOL;
         $query.= '?s <' . EF_RDFS_LABEL   . '> ' . '?label .' . PHP_EOL;
         $query.= '}' . PHP_EOL;
 
         $result = $this->_model->sparqlQuery($query);
+
         // Delete duplicates -> returns an associative array
         $temp = $this->_super_unique($result);
+
         // Create a new non associative array
         $json = array();
+
         foreach ($temp as $value) {
             $json[] = $value;
         }
+
         $this->_sushiJSONData = json_encode($json);
     }
 
