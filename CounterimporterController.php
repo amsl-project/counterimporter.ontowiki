@@ -1,9 +1,10 @@
 <?php
 /**
- * This file is part of the {@link http://ontowiki.net OntoWiki} project.
+ * This file is part of the {@link http://amsl.technology amsl} project.
  *
- * @copyright Copyright (c) 2014, {@link http://amsl.technology}
- * @license   http://opensource.org/licenses/gpl-license.php GNU General Public License (GPL)
+ * @author Norman Radtke
+ * @copyright Copyright (c) 2015, {@link http://ub.uni-leipzig.de Leipzig University Library}
+ * @license http://opensource.org/licenses/gpl-license.php GNU General Public License (GPL)
  */
 
     require realpath(dirname(__FILE__)) . '/../fulltextsearch/libraries/vendor/autoload.php';
