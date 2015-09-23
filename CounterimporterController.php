@@ -387,21 +387,9 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $regISSN = '/\d{4}\-\d{3}[\dxX]/';
 
         // create report uri
-        $id = (string)$attributes->ID;                                           // Report Id
-        $name = (string)$attributes->Name;
+        
         $pre = $this::NS_BASE . 'report/';
-
-        if ($id !== '') {
-            $this->_reportUri = $pre . urlencode($id);
-        } elseif ($name !== '') {
-            $this->_reportUri = $pre . urlencode($name);
-        } else {
-            $msg = $message = $this->_translate->translate(
-                'Import aborted. No report identifier found in COUNTER data.'
-            );
-            $this->_owApp->appendErrorMessage($msg);
-            return false;
-        }
+        $this->_reportUri = $pre . md5(rand()); // use hash instead of ID for report URI
 
         $this->_rprtRes[$this->_reportUri][EF_RDF_TYPE][] = array(
             'type' => 'uri',
@@ -410,7 +398,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
         // Check if date is a valid date (string methods used)
         if (strlen($attributes->Created > 9)) {
-            $date = substr($attributes->Created, 0, 10);
+            $date = substr($attributes->Created, 0, 10); // re-used later for report label
             if ($this->_isDate($date)) {
                 $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'wasCreatedOn'][] =
                     array(
@@ -424,6 +412,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
                     'value' => date('c'),
                     'datatype' => $this::NS_XSD . 'dateTime'
                 );
+                $date = ''; //for report label
             }
         }
 
@@ -445,19 +434,39 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
         $value = (string)$attributes->Name;                                      // Report Title
         if (!(empty($value))) {
+            $reportname = $value;       //re-used later for report label
             $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'hasReportTitle'][] = array(
                 'type' => 'literal',
                 'value' => $value
             );
-            $this->_rprtRes[$this->_reportUri][EF_RDFS_LABEL][] = array(
-                'type' => 'literal',
-                'value' => 'Report: ' . $value
-            );
         }
+        else {$reportname = '';} //for report label
+
+
+        $value = (string)$report->Vendor->Name;
+        if (!(empty($value))) {
+            $vendorname = $value;     // to be used for report label
+        }
+        else {$vendorname = '';} //for report label
+
+        //write report label
+
+        $this->_rprtRes[$this->_reportUri][EF_RDFS_LABEL][] = array(
+             'type' => 'literal',
+             'value' => $reportname . ' ' . $date . ' ' .   $vendorname
+            );
+
+
+
+
+
 
         // Vendor data
         $vendor = $report->Vendor;
         $this->_writeOrganizationData($vendor, 'Vendor');
+
+
+
 
         // Custumor data
         $customer = $report->Customer;
@@ -583,7 +592,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
                 $this->_rprtRes[$platformUri][$this::NS_SKOS . 'altLabel'][] = array(
                     'type' => 'literal',
-                    'value' => $platform
+                    'value' => $platform . ' [COUNTER]'
                 );
 
                 $this->_rprtRes[$itemUri][$this::NS_COUNTR . 'isAccessibleVia'][] = array(
@@ -599,6 +608,10 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 $this->_rprtRes[$publisherUri][EF_RDF_TYPE][] = array(
                     'type' => 'uri',
                     'value' => $this::NS_COUNTR . 'Publisher'
+                );
+               $this->_rprtRes[$publisherUri][$this::NS_SKOS . 'altLabel'][] = array(
+                    'type' => 'literal',
+                    'value' => $itemPublisher . ' [COUNTER]'
                 );
 
                 $this->_rprtRes[$itemUri][$this::NS_DC . 'publisher'][] = array(
@@ -639,7 +652,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 );
                 $this->_rprtRes[$pubUri][EF_RDFS_LABEL][] = array(
                     'type' => 'literal',
-                    'value' => 'DateRange: ' . $pubYrFrom . ' - ' . $pubYrTo
+                    'value' => $pubYrFrom . ' - ' . $pubYrTo
                 );
                 $this->_rprtRes[$pubUri][$this::NS_COUNTR . 'hasStartDay'][] = array(
                     'type' => 'literal',
@@ -658,18 +671,18 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 $start = (string)$itemPerformance->Period->Begin;
                 $end = (string)$itemPerformance->Period->End;
                 $dateRangeUri = $this::NS_BASE . 'daterange/' . urlencode($start . '-' . $end);
-                $this->_rprtRes[$this->_reportUri][$this::NS_COUNTR . 'hasPerformance'][] = array(
-                    'type' => 'uri',
-                    'value' => $dateRangeUri
-                );
+                $dateRangeLabel = $start . ' - ' . $end ;
+               
                 $this->_rprtRes[$dateRangeUri][EF_RDF_TYPE][] = array(
                     'type' => 'uri',
                     'value' => $this::NS_COUNTR . 'DateRange'
                 );
+
                 $this->_rprtRes[$dateRangeUri][EF_RDFS_LABEL][] = array(
                     'type' => 'literal',
-                    'value' => 'DateRange: ' . $start . ' - ' . $end
+                    'value' => $dateRangeLabel
                 );
+
                 $this->_rprtRes[$dateRangeUri][$this::NS_COUNTR . 'hasStartDay'][] = array(
                     'type' => 'literal',
                     'value' => $start
@@ -684,11 +697,12 @@ class CounterimporterController extends OntoWiki_Controller_Component
                     $metricType = (string)$instance->MetricType;
                     $count = (string)$instance->Count;
 
-                    // link from report item resource
+                    // link from report item to resource
                     $this->_rprtRes[$itemUri][$this::NS_COUNTR . 'hasPerformance'][] = array(
                         'type' => 'uri',
                         'value' => $instanceUri
                     );
+
 
                     // write counting instance
                     $this->_rprtRes[$instanceUri][EF_RDF_TYPE][] = array(
@@ -696,6 +710,14 @@ class CounterimporterController extends OntoWiki_Controller_Component
                         'value' => $this::NS_COUNTR . 'CountingInstance'
                     );
 
+
+                    $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'wasCountedIn'][] = array(
+                        'type' => 'uri',
+                        'value' => $this->_reportUri
+                    );
+
+
+                    
                     if ($pubUri !== '') {
                         $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'considersPubYear'][] = array(
                             'type' => 'uri',
@@ -703,27 +725,34 @@ class CounterimporterController extends OntoWiki_Controller_Component
                         );
                     }
 
-                    $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'measureForPeriod'][] = array(
+                                        $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'measuredForPeriod'][] = array(
                         'type' => 'uri',
                         'value' => $dateRangeUri
                     );
 
                     if (!(empty($perfCategory))) {
-                        $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'hasCategory'][] = array(
+                        $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'measuresCategory'][] = array(
                             'type' => 'uri',
-                            'value' => $this::NS_COUNTR . 'category/' . $perfCategory
+                            'value' => $this::NS_COUNTR .  $perfCategory
                         );
                     }
 
+
                     $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'hasMetricType'][] = array(
                         'type' => 'uri',
-                        'value' => $this::NS_BASE . 'metrictype/' . $metricType
+                        'value' => $this::NS_COUNTR .  $metricType
                     );
 
                     $this->_rprtRes[$instanceUri][$this::NS_COUNTR . 'hasCount'][] = array(
                         'type' => 'literal',
                         'value' => $count,
                         "datatype" => EF_XSD_INTEGER
+                    );
+
+                     // label
+                    $this->_rprtRes[$instanceUri][EF_RDFS_LABEL][] = array(
+                    'type' => 'literal',
+                    'value' => $dateRangeLabel . ' ; ' . $perfCategory . ' ; ' .  $metricType . ' ; ' .  $count 
                     );
                 }
             }
@@ -931,7 +960,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
             $this->_rprtRes[$organizationUri][$this::NS_VCARD . 'organization-name'][] = array(
                 'type' => 'literal',
-                'value' => $organizationName . ' [COUNTER]'
+                'value' => $organizationName . '[COUNTER]'
             );
 
             if (!(empty($organizationWebSite))) {
