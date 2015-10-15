@@ -510,7 +510,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
                                 break;
                             case 'proprietary':
                                     $base = $this::NS_BASE . 'ProprietaryID/';
-                                    $identifiers['proprietaryId'] = $itemIdValue;
+                                    $identifiers['proprietaryID'] = $itemIdValue;
                                 break;
                         }
                     }
@@ -550,7 +550,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
             if (isset($identifiers)) {
                 foreach ($identifiers as $identifier => $value) {
                     //echo 'Identifier: '. $identifier . ' value: ' . $value . '</br>';
-                    if ($identifier === 'proprietaryId') {
+                    if ($identifier === 'ProprietaryID') {
                         $this->_rprtRes[$itemUri][$this::NS_AMSL . $identifier][] = array(
                             'type' => 'literal',
                             'value' => $value
@@ -620,11 +620,11 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 );
             }
 
-            $itemDataType = (string)$reportItem->ItemDataType;
+            $itemDatatype = (string)$reportItem->ItemDatatype;
             if (!(empty($itemPublisher))) {
-                $this->_rprtRes[$itemUri][$this::NS_COUNTR . 'hasItemDataType'][] = array(
+                $this->_rprtRes[$itemUri][$this::NS_COUNTR . 'hasItemDatatype'][] = array(
                     'type' => 'uri',
-                    'value' => $this::NS_COUNTR . $itemDataType
+                    'value' => $this::NS_COUNTR . $itemDatatype
                 );
             }
 
@@ -960,7 +960,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
             $this->_rprtRes[$organizationUri][$this::NS_VCARD . 'organization-name'][] = array(
                 'type' => 'literal',
-                'value' => $organizationName . '[COUNTER]'
+                'value' => $organizationName . ' [COUNTER]'
             );
 
             if (!(empty($organizationWebSite))) {
