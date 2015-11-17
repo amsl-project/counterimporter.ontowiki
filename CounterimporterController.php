@@ -15,13 +15,22 @@
  * @package  Extensions_Issnimporter
  * @author   Norman Radtke <radtke@ub.uni-leipzig.de>
  */
+
+use Zend\Mvc\Controller\AbstractActionController;
+use Zend\View\Model\ViewModel;
+
 class CounterimporterController extends OntoWiki_Controller_Component
 {
     private $_model                = null;
     private $_translate            = null;
-    private $_organizationUri      = null;
+    private $_licensorOrganizationUri      = null;
+    private $_licenseeOrganizationUri      = null;
+    private $_licensorOrganizations        = null;
+    private $_licensorOrganizationJSONData = null;
+    private $_licenseeOrganizations        = null;
+    private $_licenseeOrganizationJSONData = null;
+    private $_error_returned_sushi_vendor = null;
     private $_organizations        = null;
-    private $_organizationJSONData = null;
     private $_sushiSettings        = null;
     private $_sushiJSONData        = null;
     private $_rprtRes              = null;
@@ -45,7 +54,6 @@ class CounterimporterController extends OntoWiki_Controller_Component
     public function init()
     {
         parent::init();
-
         $action = $this->_request->getActionName();
 
         $this->view->placeholder('main.window.title')->set('Import Data');
@@ -131,7 +139,14 @@ class CounterimporterController extends OntoWiki_Controller_Component
             if (Erfurt_Uri::check($sushiUri)) {
                 if (isset($start) && isset($end)) {
                     if (new DateTime($start) < new DateTime($end)) {
-                        $this->_sushiImport($sushiUri, $start, $end);
+                        try {
+                            $this->_sushiImport($sushiUri, $start, $end);
+                        }catch (Exception $e){
+
+                            $msg = 'There might be a problem retrieving Sushi. This is the server response:';
+                            $msg.= $this->_error_returned_sushi_vendor;
+                            $this->_owApp->appendErrorMessage($msg);
+                        }
                     } else {
                         $msg = $this->_translate->translate(
                             'The end date lies before the start date.'
@@ -158,7 +173,9 @@ class CounterimporterController extends OntoWiki_Controller_Component
 
         if ($this->_request->isPost()) {
             $post = $this->_request->getPost();
-            $this->_organizationUri = $post['organization-input'];
+            $this->_licensorOrganizationUri = $post['licensor-organization-input'];
+            $this->_licenseeOrganizationUri = $post['licensee-organization-input'];
+
             $upload = new Zend_File_Transfer();
             $filesArray = $upload->getFileInfo();
 
@@ -199,7 +216,8 @@ class CounterimporterController extends OntoWiki_Controller_Component
             $xmlstr = file_get_contents($file);
             $this->_prepareXml ($xmlstr);
         } else {
-            return;
+            $default_licensee = $this->_privateConfig->toArray()['default_licensee'];
+            $this->view->default_licensee = $default_licensee;
         }
     }
 
@@ -222,17 +240,33 @@ class CounterimporterController extends OntoWiki_Controller_Component
     /**
      * This action will return a json_encoded array containing organization lookup data for JS
      */
-    public function getorganizationsAction()
+    public function getlicensororganizationsAction()
     {
         // tells the OntoWiki to not apply the template to this action
         $this->_helper->viewRenderer->setNoRender();
         $this->_helper->layout->disableLayout();
 
-        if ($this->_organizationJSONData === null) {
-            $this->_setOrganizationJSONData();
+        if ($this->_licensorOrganizationJSONData === null) {
+            $this->_setlicensorOrganizationJSONData();
         }
 
-        $this->_response->setBody($this->_organizationJSONData);
+        $this->_response->setBody($this->_licensorOrganizationJSONData);
+    }
+
+    /**
+     * This action will return a json_encoded array containing organization lookup data for JS
+     */
+    public function getlicenseeorganizationsAction()
+    {
+        // tells the OntoWiki to not apply the template to this action
+        $this->_helper->viewRenderer->setNoRender();
+        $this->_helper->layout->disableLayout();
+
+        if ($this->_licenseeOrganizationJSONData === null) {
+            $this->_setlicenseeOrganizationJSONData();
+        }
+
+        $this->_response->setBody($this->_licenseeOrganizationJSONData);
     }
 
     /**
@@ -343,7 +377,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
             if (isset($out)) {
                 $this->_owApp->appendErrorMessage($out);
             }
-            return;
+            throw new Exception('No report data found.');
         }
 
         // $reportFound === true
@@ -509,8 +543,11 @@ class CounterimporterController extends OntoWiki_Controller_Component
                                 }
                                 break;
                             case 'proprietary':
+                                if($itemIdValue == 'ACS Publications'){
+                                    echo "";
+                                }
                                     $base = $this::NS_BASE . 'ProprietaryID/';
-                                    $identifiers['proprietaryID'] = $itemIdValue;
+                                    $identifiers['ProprietaryID'] = $itemIdValue;
                                 break;
                         }
                     }
@@ -762,12 +799,15 @@ class CounterimporterController extends OntoWiki_Controller_Component
     /**
      * This method searches for organizations and their different kind of labels
      */
-    private function _setOrganizations() {
+    private function _setlicensorOrganizations() {
         if ($this->_model === null) {
             return;
         }
 
-        $query = 'SELECT *  WHERE {' . PHP_EOL ;
+        $query = 'SELECT * ' . PHP_EOL ;
+        $query.= 'FROM <http://amsl.technology/counter/resource/>' . PHP_EOL ;
+        $query.= 'FROM <http://ubl.amsl.technology/erm/>' . PHP_EOL ;
+        $query.= ' WHERE {' . PHP_EOL ;
         $query.= '  ?org a <' . $this::NS_FOAF . 'Organization> .' . PHP_EOL;
         $query.= '  ?s <' . $this::NS_AMSL . 'licensor>  ?org .' . PHP_EOL;
         $query.= '  OPTIONAL {?org <' . $this::NS_VCARD . 'organization-name> ?name .}' . PHP_EOL;
@@ -776,7 +816,13 @@ class CounterimporterController extends OntoWiki_Controller_Component
         $query.= '  OPTIONAL {?contract <' . $this::NS_AMSL . 'licensor> ?org .}' . PHP_EOL;
         $query.= '}' . PHP_EOL;
 
-        $result = $this->_model->sparqlQuery($query);
+        // querying the meta data sources with their collections
+        $options = $this->_owApp->getConfig()->toArray()['store']['virtuoso'];
+        $options['is_open_source_version'] = '1';
+        $backend = new Erfurt_Store_Adapter_Virtuoso($options);
+        $backend->init();
+        $result = $backend->sparqlQuery($query);
+
 
         $organizations = array();
         if (count($result) > 0) {
@@ -797,16 +843,62 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 }
             }
         }
-        $this->_organizations = $organizations;
+        $this->_licensorOrganizations = $organizations;
     }
 
-    private function _setOrganizationJSONData () {
-        if ($this->_organizations === null) {
-            $this->_setOrganizations();
+    /**
+     * This method searches for organizations and their different kind of labels
+     */
+    private function _setlicenseeOrganizations() {
+        if ($this->_model === null) {
+            return;
+        }
+
+        $query = 'PREFIX lobid: <http://purl.org/lobid/lv#>
+                  SELECT DISTINCT ?org ?name
+                  FROM <http://lobid.org/>
+                  WHERE {
+                  ?org lobid:isil ?isil .
+                  ?org <http://xmlns.com/foaf/0.1/name> ?name
+                  }' . PHP_EOL ;
+
+        // querying the meta data sources with their collections
+        $options = $this->_owApp->getConfig()->toArray()['store']['virtuoso'];
+        $options['is_open_source_version'] = '1';
+        $backend = new Erfurt_Store_Adapter_Virtuoso($options);
+        $backend->init();
+        $result = $backend->sparqlQuery($query);
+
+
+        $organizations = array();
+        if (count($result) > 0) {
+            foreach ($result as $key => $organization) {
+                // Write data used for matching
+                $organizations[$organization['org']]['org'] = $organization['org'];
+
+                if (!(empty($organization['cntrName']))) {
+                    $organizations[$organization['org']]['cntrName'][] = $organization['cntrName'];
+                }
+
+                if (!(empty($organization['label']))) {
+                    $organizations[$organization['org']]['label'][] = $organization['label'];
+                }
+
+                if (!(empty($organization['name']))) {
+                    $organizations[$organization['org']]['name'][] = $organization['name'];
+                }
+            }
+        }
+        $this->_licenseeOrganizations = $organizations;
+    }
+
+    private function _setlicensorOrganizationJSONData () {
+        if ($this->_licensorOrganizations === null) {
+            $this->_setlicensorOrganizations();
         }
 
         $temp = array();
-        foreach ($this->_organizations as $key => $value) {
+        foreach ($this->_licensorOrganizations as $key => $value) {
             foreach ($value as $key2 =>$labels) {
                 if ($key2 !== 'org' && (count($labels) > 0)) {
                     foreach ($labels as $label) {
@@ -826,7 +918,36 @@ class CounterimporterController extends OntoWiki_Controller_Component
         foreach ($temp as $value) {
             $json[] = $value;
         }
-        $this->_organizationJSONData = json_encode($json);
+        $this->_licensorOrganizationJSONData = json_encode($json);
+    }
+
+    private function _setlicenseeOrganizationJSONData () {
+        if ($this->_licenseeOrganizations === null) {
+            $this->_setlicenseeOrganizations();
+        }
+
+        $temp = array();
+        foreach ($this->_licenseeOrganizations as $key => $value) {
+            foreach ($value as $key2 =>$labels) {
+                if ($key2 !== 'org' && (count($labels) > 0)) {
+                    foreach ($labels as $label) {
+                        $temp[] = array(
+                            'org' => $key,
+                            'name' => $label
+                        );
+                    }
+                }
+            }
+        }
+
+        // Delete duplicates -> returns an associative array
+        $temp = $this->_super_unique($temp);
+        // Create a new non associative array
+        $json = array();
+        foreach ($temp as $value) {
+            $json[] = $value;
+        }
+        $this->_licenseeOrganizationJSONData = json_encode($json);
     }
 
 
@@ -902,11 +1023,13 @@ class CounterimporterController extends OntoWiki_Controller_Component
      * @return mixed
      */
     private function _writeOrganizationData ($organization, $type) {
-        $orgRes = array();
+     //   $orgRes = array();
         if ($type === 'Vendor') {
             $predicate = 'creates';
+            $organizationUri = $this->_licensorOrganizationUri;
         } elseif ($type === 'Customer') {
             $predicate = 'receives';
+            $organizationUri = $this->_licenseeOrganizationUri;
         }
 
         $contact = $organization->Contact;
@@ -921,21 +1044,22 @@ class CounterimporterController extends OntoWiki_Controller_Component
         }
 
         // Find a customer URI
-        if (!(empty($organizationName))) {
-            $organizationUri = $this::NS_BASE . 'organization/' . urlencode($organizationName);
-            $bestMatch = $this->_matchOrganization($organizationName);
-            $this->_writeOrganizationMatches($bestMatch, $type);
-        } else {
-            if (!(empty($organizationId))) {
-                $organizationUri = $this::NS_BASE . 'organization/' . urlencode($organizationId);
-            } elseif (!(empty($organizationMail) && empty($organizationWebSite) &&
-                empty($organizationLogoUrl))
-            ) {
-                $organizationUri = $this::NS_BASE . 'organization/' . md5(rand());
-            } else {
-                $organizationUri = '';
-            }
-        }
+//        if (!(empty($organizationName))) {
+//            $organizationUri = $this::NS_BASE . 'organization/' . urlencode($organizationName);
+//            $bestMatch = $this->_matchOrganization($organizationName);
+//            $this->_writeOrganizationMatches($bestMatch, $type);
+//         } else {
+//          if (!(empty($organizationId))) {
+//                $organizationUri = $this::NS_BASE . 'organization/' . urlencode($organizationId);
+//            } elseif (!(empty($organizationMail) && empty($organizationWebSite) &&
+//              empty($organizationLogoUrl))
+//          ) {
+//              $organizationUri = $this::NS_BASE . 'organization/' . md5(rand());
+//          } else {
+//              $organizationUri = '';
+//          }
+//        }
+
 
         if (!(empty($organizationUri))) {
             $this->_rprtRes[$organizationUri][EF_RDF_TYPE][] = array(
@@ -1220,6 +1344,9 @@ class CounterimporterController extends OntoWiki_Controller_Component
         }
 
         foreach ($ch_result as $response) {
+            // in case there is no suhsi but an error message sent bay by the server
+            // $ch_result would be of length 1
+            $this->_error_returned_sushi_vendor = $response;
             $this->_prepareXml($response);
         }
     }

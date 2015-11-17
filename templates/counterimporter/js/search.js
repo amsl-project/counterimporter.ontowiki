@@ -23,18 +23,33 @@ sushi = new Bloodhound({
 });
 sushi.initialize();
 
-var organization;
-organization = new Bloodhound({
+var licensor_organization;
+licensor_organization = new Bloodhound({
     datumTokenizer: function (datum) {
         return Bloodhound.tokenizers.whitespace(datum.name);
     },
     queryTokenizer: Bloodhound.tokenizers.whitespace,
     limit: i,
     prefetch: {
-        url: urlBase + 'counterimporter/getorganizations'
+        url: urlBase + 'counterimporter/getlicensororganizations'
     }
 });
-organization.initialize();
+licensor_organization.initialize();
+
+var licensee_organization;
+licensee_organization = new Bloodhound({
+    datumTokenizer: function (datum) {
+        return Bloodhound.tokenizers.whitespace(datum.name);
+    },
+    queryTokenizer: Bloodhound.tokenizers.whitespace,
+    limit: i,
+    prefetch: {
+        url: urlBase + 'counterimporter/getlicenseeorganizations'
+    }
+});
+licensee_organization.initialize();
+
+
 /**
  * Now use the input fields to find SUSHI settings while typing
  */
@@ -56,14 +71,30 @@ $(document).ready(function() {
             footer: '<div class="empty-message">A maximum of ' + i + ' results are shown.</div>'
         }
     });
-    organization.clearPrefetchCache();
+
+    licensor_organization.clearPrefetchCache();
     sourceOrganization  = '<p>';
-    sourceOrganization += '<span class="highlight-title">{{name}}</span><br><span class="origin-index">URI: {{org}}</span><br>';
+    sourceOrganization += '<span class="highlight-title">{{name}}</span><!--<br><span class="origin-index">URI: {{org}}</span>--><br>';
     sourceOrganization += '</p>';
-    $('#organization-input.typeahead').typeahead(null, {
+    $('#licensor-organization-input.typeahead').typeahead(null, {
         name: 'organization-matches',
         displayKey: 'org',
-        source: organization.ttAdapter(),
+        source: licensor_organization.ttAdapter(),
+        templates: {
+            empty: ['<div class="empty-message">', '<strong>' + noResults + '</strong>', '</div>'].join('\n'),
+            suggestion: Handlebars.compile(sourceOrganization),
+            footer: '<div class="empty-message">A Maximum of ' + i + ' results are shown.</div>'
+        }
+    });
+
+    licensee_organization.clearPrefetchCache();
+    sourceOrganization  = '<p>';
+    sourceOrganization += '<span class="highlight-title">{{name}}</span><!--<br><span class="origin-index">URI: {{org}}</span>--><br>';
+    sourceOrganization += '</p>';
+    $('#licensee-organization-input.typeahead').typeahead(null, {
+        name: 'organization-matches',
+        displayKey: 'org',
+        source: licensee_organization.ttAdapter(),
         templates: {
             empty: ['<div class="empty-message">', '<strong>' + noResults + '</strong>', '</div>'].join('\n'),
             suggestion: Handlebars.compile(sourceOrganization),

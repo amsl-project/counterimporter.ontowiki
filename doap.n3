@@ -17,6 +17,7 @@
   doap:description "Imports a Counter XML File" ;
   doap:maintainer <http://ub.uni-leipzig.de> ;
   owconfig:templates "templates" ;
+  owconfig:default_licensee "http://lobid.org/organisation/DE-15" ;
   owconfig:languages "languages" ;
   doap:release :v1-0 ;
   owconfig:hasModule :Selector .

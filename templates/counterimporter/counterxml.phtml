@@ -3,7 +3,15 @@
  * OntoWiki rdf upload import import template
  */
 $translate = OntoWiki::getInstance()->translate;
+$urlBase = OntoWiki::getInstance()->getUrlBase();
+//$default_licensee = OntoWiki::getInstance()->getConfig()->readOnly();
 ?>
+<script type="text/javascript" src="<?php echo ($urlBase . 'extensions/counterimporter/templates/counterimporter/js/typeahead.bundle.js')?>"></script>
+<script type="text/javascript" src="<?php echo ($urlBase . 'extensions/counterimporter/templates/counterimporter/js/handlebars.js')?>"></script>
+<script type="text/javascript" src="<?php echo ($urlBase . 'extensions/counterimporter/templates/counterimporter/js/search.js')?>"></script>
+<script type="text/javascript" src="<?php echo ($urlBase . 'extensions/themes/silverblue/scripts/libraries/jquery-ui.js')?>"></script>
+<link rel="stylesheet" type="text/css" href="<?php echo ($urlBase . 'extensions/counterimporter/templates/counterimporter/css/counter.css')?>">
+<link rel="stylesheet" type="text/css" href="<?php echo ($urlBase . 'extensions/counterimporter/templates/counterimporter/css/hint.min.css')?>">
 <fieldset class="activeForm" id="importdata">
     <legend><?php echo $this->_($translate->translate('Upload a Counter XML file')) ?></legend>
     <div class="width49 float margin">
@@ -32,7 +40,7 @@ $translate = OntoWiki::getInstance()->translate;
             </p>
         </div>
         <div class="sushi-field">
-            <input  id="organization-input" class="typeahead width67" type="text" value="" name="organization-input"/>
+            <input  id="licensor-organization-input" class="typeahead width67" type="text" value="" name="licensor-organization-input"/>
         </div>
         <div>
             <p class="messagebox info">
@@ -40,7 +48,7 @@ $translate = OntoWiki::getInstance()->translate;
             </p>
         </div>
         <div class="sushi-field">
-            <input  id="customer-organization-input" class="typeahead width67" type="text" value="Test" name="organization-input"/>
+            <input  id="licensee-organization-input" class="typeahead width67" type="text" value="<?php echo $this->default_licensee ?>" name="licensee-organization-input"/>
         </div>
     </div>
 </fieldset>
