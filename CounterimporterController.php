@@ -143,7 +143,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
                             $this->_sushiImport($sushiUri, $start, $end);
                         }catch (Exception $e){
 
-                            $msg = 'There might be a problem retrieving Sushi. This is the server response:';
+                            $msg = 'There might be a problem retrieving Sushi. This is the server response (send it to your administrator if any open questions remain):';
                             $msg.= $this->_error_returned_sushi_vendor;
                             $this->_owApp->appendErrorMessage($msg);
                         }
