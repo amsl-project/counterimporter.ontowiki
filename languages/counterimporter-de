@@ -18,10 +18,11 @@ Import aborted. No report identifier found in COUNTER data.;Import abgebrochen. 
 No organization found that corresponds to this SUSHI data.;Es kopnnte keine Organisation gefunden werden, die mit dem gewählten SUSHI-Anbieter verknüpft ist.
 Please check if the resource $resourceUri has a statement terms:hasAmslLicensor.;Bitte überprüfen Sie, ob die Ressource $resourceUri ein Statement mit dem Prädikate terms:hasAmslLicensor besitzt.
 Upload a Counter XML file;Eine COUNTER-XML-Datei hochladen
-Please select a UTF-8 encoded COUNTER XML File to import. (Note: Only COUNTER Version 4 supported);Bitte wählen Sie eine COUNTER-XML-Datei (UTF-8) für den Upload aus.
+Please select a UTF-8 encoded COUNTER XML File to import. (Note: Only COUNTER Version 4 supported);Bitte wählen Sie eine COUNTER-XML-Datei (UTF-8) für den Upload aus (es wird nur Counter in der Version 4 unterstützt).
 Please select the organization that is the licensor of the statistical data that will be retrieved.;Bitte wählen Sie die Organization aus, die der Lizenzgeber der von diesen COUNTER-Daten abgedeckten Titel ist.
 Chose your SUSHI vendor;Wählen Sie einen SUSHI-Anbieter
 Please select the SUSHI data you want to use for COUNTER import.;Bitte wählen Sie einen SUSHI-Anbieter.
 Please specify the date range.;Bitte wählen Sie die gewünschte Zeitspanne.
 Start date;Startdatum
 End date;Enddatum
+There might be a problem retrieving Sushi. This is the server response (send it to your administrator if any open questions remain):;Leider gab es einen Fehler beim Laden der Sushidaten. Falls Ihnen die folgende Nachricht des Sushi-Anbieters nicht weiterhilft, leiten Sie diese zur Bearbeitung bitte an Ihren Administrator weiter:

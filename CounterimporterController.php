@@ -143,7 +143,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
                             $this->_sushiImport($sushiUri, $start, $end);
                         }catch (Exception $e){
 
-                            $msg = 'There might be a problem retrieving Sushi. This is the server response (send it to your administrator if any open questions remain):';
+                            $msg = $this->_translate->translate('There might be a problem retrieving Sushi. This is the server response (send it to your administrator if any open questions remain):');
                             $msg.= $this->_error_returned_sushi_vendor;
                             $this->_owApp->appendErrorMessage($msg);
                         }
@@ -1334,6 +1334,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
             curl_setopt($ch, CURLOPT_URL, $sushiUrl);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: text/xml'));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array('SOAPAction: SushiService:GetReport'));
             curl_setopt($ch, CURLOPT_POSTFIELDS, $xml);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             //curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
