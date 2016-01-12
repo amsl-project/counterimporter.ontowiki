@@ -140,12 +140,19 @@ class CounterimporterController extends OntoWiki_Controller_Component
                 if (isset($start) && isset($end)) {
                     if (new DateTime($start) < new DateTime($end)) {
                         try {
-                            $this->_sushiImport($sushiUri, $start, $end);
+                            $this->_sushiImport($sushiUri, $start, $end, false);
                         }catch (Exception $e){
+                            $msg1 = $this->_error_returned_sushi_vendor;
+                            try{
+                                $this->_sushiImport($sushiUri, $start, $end, true);
+                            }catch(Exception $e){
+                                $msg0 = $this->_translate->translate('There might be a problem retrieving Sushi. This are the server responses send them to your administrator if any open questions remain (Errormessage one is is for a request without and message two with SOAP-ActionHeader):');
+                                $msg2 = $this->_error_returned_sushi_vendor;
+                                $this->_owApp->appendErrorMessage($msg0);
+                                $this->_owApp->appendErrorMessage($msg1);
+                                $this->_owApp->appendErrorMessage($msg2);
+                            }
 
-                            $msg = $this->_translate->translate('There might be a problem retrieving Sushi. This is the server response (send it to your administrator if any open questions remain):');
-                            $msg.= $this->_error_returned_sushi_vendor;
-                            $this->_owApp->appendErrorMessage($msg);
                         }
                     } else {
                         $msg = $this->_translate->translate(
@@ -1196,7 +1203,7 @@ class CounterimporterController extends OntoWiki_Controller_Component
        return;
     }
 
-    private function _sushiImport ($resourceUri, $startDate, $endDate ) {
+    private function _sushiImport ($resourceUri, $startDate, $endDate, $useActionHeader) {
         $sushiData = $this->_getSushiParams($resourceUri);
         $sushiUrl = $sushiData[$this::NS_SUSHI . 'hasSushiUrl'];
         $rqstrID = $sushiData[$this::NS_SUSHI . 'hasSushiRequestorID'];
@@ -1334,7 +1341,9 @@ class CounterimporterController extends OntoWiki_Controller_Component
             curl_setopt($ch, CURLOPT_URL, $sushiUrl);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: text/xml'));
-            curl_setopt($ch, CURLOPT_HTTPHEADER, array('SOAPAction: SushiService:GetReport'));
+            if($useActionHeader) {
+                curl_setopt($ch, CURLOPT_HTTPHEADER, array('SOAPAction: SushiService:GetReport'));
+            }
             curl_setopt($ch, CURLOPT_POSTFIELDS, $xml);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             //curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);

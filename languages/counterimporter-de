@@ -25,4 +25,4 @@ Please select the SUSHI data you want to use for COUNTER import.;Bitte wählen S
 Please specify the date range.;Bitte wählen Sie die gewünschte Zeitspanne.
 Start date;Startdatum
 End date;Enddatum
-There might be a problem retrieving Sushi. This is the server response (send it to your administrator if any open questions remain):;Leider gab es einen Fehler beim Laden der Sushidaten. Falls Ihnen die folgende Nachricht des Sushi-Anbieters nicht weiterhilft, leiten Sie diese zur Bearbeitung bitte an Ihren Administrator weiter:
+There might be a problem retrieving Sushi. This are the server responses send them to your administrator if any open questions remain (Errormessage one is is for a request without and message two with SOAP-ActionHeader):;Leider gab es einen Fehler beim Laden der Sushidaten. Falls Ihnen die folgenden Nachrichten des Sushi-Anbieters nicht weiterhelfen, leiten Sie diese zur Bearbeitung bitte an Ihren Administrator weiter (Die erste Fehlermedlung ist für eine Serveranfrage ohne und die zweite für eine Serveranfrage mit SOAP-ActionHeader):
